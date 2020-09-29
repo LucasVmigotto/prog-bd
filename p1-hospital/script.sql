@@ -622,8 +622,24 @@ SELECT COUNT (*) as internacao FROM INTERNACAO;
 -- 2    Implemente um controle que evite que um
 --      paciente seja internado em um leito-quarto
 --      que ainda esteja ocupado.
-
-
+CREATE OR REPLACE TRIGGER validacao_interncao
+    BEFORE INSERT OR UPDATE ON internacao
+    FOR EACH ROW
+    DECLARE vl_num_internacao internacao.num_internacao%TYPE
+    BEGIN
+        SELECT COUNT(internacao.num_internacao)
+            INTO vl_num_internacao
+            WHERE internacao.num_leito = :NEW.num_leito
+            AND internacao.cod_paciente = :NEW.cod_paciente;
+        IF vl_num_internacao >= 1 THEN
+            RAISE_APPLICATION_ERROR (
+                -20001,
+                'Leito ' ||
+                TO_CHAR(:NEW.num_leito) ||
+                ' já está ocupado.'
+            );
+        END IF;
+    END;
 
 -- 3    Implemente um controle para registrar em
 --      log as aplicações de medicamento (dar o

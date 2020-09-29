@@ -628,8 +628,65 @@ SELECT COUNT (*) as internacao FROM INTERNACAO;
 -- 3    Implemente um controle para registrar em
 --      log as aplicações de medicamento (dar o
 --      remédio).
+DROP TABLE auditoria_aplic_med CASCADE CONSTRAINTS;
+CREATE TABLE auditoria_aplic_med (
+    id_log INTEGER PRIMARY KEY,
+    acao CHAR(20) CHECK (
+        acao IN (
+            'INSERCAO','ATUALIZACAO_APLICADOR','ATUALIZACAO_PRESCRICAO'
+        )
+    ) NOT NULL,
+    data_hora_aplicacao TIMESTAMP NOT NULL,
+    aplicacao INTEGER,
+    old_aplicador CHAR(15),
+    new_aplicador CHAR(15),
+    old_prescricao INTEGER
+    new_prescricao INTEGER
+);
 
+DROP SEQUENCE log_aplic_med;
+CREATE SEQUENCE log_aplic_med START WITH 1000;
 
+DROP TRIGGER gerar_log_aplic_med
+CREATE OR REPLACE TRIGGER gerar_log_aplic_med
+    AFTER INSERT IN aplicacao
+    FOR EACH ROW
+    BEGIN
+        IF INSERTING THEN
+            INSERT INTO auditoria_aplic_med VALUES (
+                log_aplic_med.NEXTVAL,
+                'INSERCAO',
+                CURRENT_TIMESTAMP,
+                :OLD.num_aplicacao
+                null,
+                :NEW.aplicado_por,
+                null,
+                :NEW.num_prescricao
+            );
+        ELSIF UPDATING ('aplicado_por') THEN
+            INSERT INTO auditoria_aplic_med VALUES (
+                log_aplic_med.NEXTVAL,
+                'ATUALIZACAO_APLICADOR',
+                CURRENT_TIMESTAMP,
+                :OLD.num_aplicacao,
+                :OLD.aplicado_por,
+                :NEW.aplicado_por,
+                null,
+                null,
+            );
+        ELSIF UPDATING ('num_prescricao') THEN
+            INSERT INTO auditoria_aplic_med VALUES (
+                log_aplic_med.NEXTVAL,
+                'ATUALIZACAO_APLICADOR',
+                CURRENT_TIMESTAMP,
+                :OLD.num_aplicacao,
+                null,
+                null,
+                :OLD.num_prescricao,
+                :NEW.num_prescricao,
+            );
+        END IF;
+    END gerar_log_aplic_med;
 
 -- 4    Implemente uma funçãoque retorne a quantidade
 --      de pacientes internados atualmentepara um

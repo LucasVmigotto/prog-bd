@@ -187,9 +187,12 @@ INSERT INTO especialidade VALUES (9, 'Nefrologia');
 
 /* medico efetivo */
 DROP TABLE medico_efetivo CASCADE CONSTRAINTS;
-CREATE TABLE medico_efetivo
-( crm_efetivo INTEGER NOT NULL REFERENCES MEDICO ,
-cod_espec INTEGER NOT NULL REFERENCES especialidade );
+CREATE TABLE medico_efetivo (
+    crm_efetivo INTEGER NOT NULL
+        REFERENCES MEDICO,
+    cod_espec INTEGER NOT NULL
+        REFERENCES especialidade
+);
 
 INSERT INTO medico_efetivo VALUES (1234, 1);
 INSERT INTO medico_efetivo VALUES (3236, 2);
@@ -616,7 +619,41 @@ SELECT COUNT (*) as internacao FROM INTERNACAO;
 --      inclusões/atualizações nas tabelas de Médico
 --      Efetivo e Residente baseado no tipo de
 --      contrato (tabela Médico)
+CREATE OR REPLACE TRIGGER validacao_med_redidente
+    BEFORE INSERT OR UPDATE ON medico_residente
+    DECLARE vl_tipo_contrato medico.tipo_contrato%TYPE;
+    FOR EACH ROW
+    BEGIN
+        SELECT medico.tipo_contrato
+            INTO vl_tipo_contrato
+            WHERE medico.crm = :NEW.crm_residente
+        IF vl_tipo_contrato NOT LIKE 'RESIDENTE' THEN
+            RAISE_APPLICATION_ERROR (
+                -20001,
+                'Médico com CRM ' ||
+                TO_CHAR(:NEW.crm_residente) ||
+                ' não é médico residente.'
+            );
+        END IF;
+    END;
 
+CREATE OR REPLACE TRIGGER validacao_med_efetivo
+    BEFORE INSERT OR UPDATE ON medico_efetivo
+    FOR EACH ROW
+    DECLARE vl_tipo_contrato medico.tipo_contrato%TYPE;
+    BEGIN
+        SELECT medico.tipo_contrato
+            INTO vl_tipo_contrato
+            WHERE medico.crm = :NEW.crm_efetivo
+        IF vl_tipo_contrato NOT LIKE 'EFETIVO' THEN
+            RAISE_APPLICATION_ERROR (
+                -20001,
+                'Médico com CRM ' ||
+                TO_CHAR(:NEW.crm_residente) ||
+                ' não é médico efetivo.'
+            );
+        END IF;
+    END;
 
 
 -- 2    Implemente um controle que evite que um
@@ -704,7 +741,7 @@ CREATE OR REPLACE TRIGGER gerar_log_aplic_med
         END IF;
     END gerar_log_aplic_med;
 
--- 4    Implemente uma funçãoque retorne a quantidade
+-- 4    Implemente uma função que retorne a quantidade
 --      de pacientes internados atualmentepara um
 --      determinado motivo de internação, por exemplo,
 --      Crise Renal ou Infarto, etc., passando como

@@ -943,7 +943,8 @@ CREATE OR REPLACE FUNCTION qtde_pedidos (
     vcli IN cliente.nome_fantasia%TYPE,
     vini IN pedido.dt_hora_ped%TYPE,
     vfim IN pedido.dt_hora_ped%TYPE
-) RETURN resultado_cli IS vqtde resultado_cli := resultado_cli();
+) RETURN
+    resultado_cli IS vqtde resultado_cli := resultado_cli();
     vargumento cliente.nome_fantasia%TYPE := '%'||UPPER(vcli)||'%';
     vsetem SMALLINT := 0;
     BEGIN

@@ -97,7 +97,7 @@ CREATE TABLE deposito (
     cod_regiao INTEGER NOT NULL REFERENCES regiao,
     cod_func_gerente_depo NUMBER(7) REFERENCES funcionario
 );
- 
+
 /* Tabela Produto */
 -- Criação
 DROP TABLE produto CASCADE CONSTRAINTS;
@@ -112,9 +112,9 @@ CREATE TABLE produto (
     marca CHAR(15) NOT NULL,
     CONSTRAINT prod_nome_uq UNIQUE (nome_prod)
 );
--- Alterações 
+-- Alterações
 ALTER TABLE produto ADD tamanho CHAR(3);
- 
+
 /* Tabela Pedido */
 -- Criação
 DROP TABLE pedido CASCADE CONSTRAINTS;
@@ -314,7 +314,7 @@ ALTER TABLE cliente ADD pais_cli CHAR(3) REFERENCES pais;
 ALTER TABLE funcionario ADD pais_func CHAR(3) REFERENCES pais;
 
 -- Verificação de Constraints
-ALTER TABLE cliente ADD CHECK ( situacao_cli IN ('ATIVO', 'INATIVO', 'SUSPENSO')); 
+ALTER TABLE cliente ADD CHECK ( situacao_cli IN ('ATIVO', 'INATIVO', 'SUSPENSO'));
 
 -- Preço maior ou igual a preço de custo
 ALTER TABLE produto ADD CHECK ( preco_venda >= preco_custo);
@@ -326,7 +326,7 @@ ALTER TABLE pedido ADD CHECK ( vl_total_ped >= 0);
 ALTER TABLE pedido ADD CHECK ( vl_descto_ped >= 0);
 ALTER TABLE pedido ADD CHECK ( vl_frete_ped >= 0);
 ALTER TABLE itens_pedido ADD CHECK ( qtde_itens_pedido > 0);
-	
+
 -- Renomeando coluna
 ALTER TABLE itens_pedido RENAME COLUMN qtde_itens_pedido to qtde_pedida;
 ALTER TABLE itens_pedido RENAME COLUMN descto_itens_pedido to descto_item;
@@ -379,7 +379,7 @@ ALTER TABLE cliente ADD nome_fantasia VARCHAR2(30);
 
 UPDATE cliente c
     SET c.nome_fantasia = (
-        SELECT SUBSTR(nome_fantasia, 1, INSTR(nome_fantasia,' ')- 1) 
+        SELECT SUBSTR(nome_fantasia, 1, INSTR(nome_fantasia,' ')- 1)
         FROM cliente_pf
         WHERE cod_cli_pf = c.cod_cli
     )
@@ -403,17 +403,17 @@ INSERT INTO funcionario VALUES ( 3, 'Kraus Schumann', 'Rua C,100','M', '17-06-20
 INSERT INTO funcionario VALUES ( 4, 'Kurota Issa', 'Rua D,23', 'F','07-04-2000', 2, 35, 5 , null, 'JAP',6450);
 INSERT INTO funcionario VALUES ( 5, 'Cristina Moreira', 'Rua Abc,34', 'F','04-03-2000', 3, 35, 5, 4, 'BRA', 4000);
 INSERT INTO funcionario VALUES ( 6, 'Jose Silva', 'Av. Sete, 10', 'M','18-01-2001', 12, 41,3, NULL, 'BRA', 3200);
-INSERT INTO funcionario VALUES ( 7, 'Roberta Pereira', 'Largo batata, 200', 'F','14-05-2000', 12, 33, 3, 1, 'EUA', 5300); 
+INSERT INTO funcionario VALUES ( 7, 'Roberta Pereira', 'Largo batata, 200', 'F','14-05-2000', 12, 33, 3, 1, 'EUA', 5300);
 INSERT INTO funcionario VALUES ( 8, 'Alex Alves', 'Rua Dabliu, 10','M','07-04-2000', 2, 12, 1, 3, 'BRA', 2900);
-INSERT INTO funcionario VALUES ( 9, 'Isabela Matos', 'Rua Ipsilone, 20', 'F','09-02-2001',2, 42, 6,4, 'EUA', 3200); 
+INSERT INTO funcionario VALUES ( 9, 'Isabela Matos', 'Rua Ipsilone, 20', 'F','09-02-2001',2, 42, 6,4, 'EUA', 3200);
 INSERT INTO funcionario VALUES (10, 'Matheus De Matos','Av. Beira-Mar, 300', 'M','27-02-2001', 2, 51,5,2, 'ESP',4000);
 INSERT INTO funcionario VALUES (11, 'Wilson Borga', 'Travessa Circular', 'M','14-05-2000', 2, 33, 3,3,'BRA', 3150);
 INSERT INTO funcionario VALUES (12, 'Marco Rodrigues', 'Rua Beta, 20', 'M', '18-01-2000', 8, 43, 1, 1, 'URU', 3400);
-INSERT INTO funcionario VALUES (13, 'Javier Hernandez', 'Calle Sur, 20','M', '18-02-2000', 3, 51, 3, 3, 'ARG', 4210); 
+INSERT INTO funcionario VALUES (13, 'Javier Hernandez', 'Calle Sur, 20','M', '18-02-2000', 3, 51, 3, 3, 'ARG', 4210);
 INSERT INTO funcionario VALUES (14, 'Chang Shung Dao', 'Dai Kai, 300', 'F', '22-01-2001', 10, 12, 2, 2, 'CHI', 3980);
 INSERT INTO funcionario VALUES (15, 'Simon Holowitz', '19th Street','M', '09-10-2001',3, 14, 6, 6, 'GBR', 5460);
 INSERT INTO funcionario VALUES (16, 'Penelope Xavier', 'Calle Paraguay, 20', 'F', '12-11-2003', 8, 43, 1, 1, 'URU', 2400);
-INSERT INTO funcionario VALUES (17, 'Esmeralda Soriano', 'Calle Peru, 40','F', '18-12-2006', 3, 51, 3, 3, 'ARG', 4710); 
+INSERT INTO funcionario VALUES (17, 'Esmeralda Soriano', 'Calle Peru, 40','F', '18-12-2006', 3, 51, 3, 3, 'ARG', 4710);
 INSERT INTO funcionario VALUES (18, 'Ari Gato Sam', 'Yakisoba, 300', 'M', '21-01-2011', 10, 12, 2, 2, 'CHI', 1980);
 INSERT INTO funcionario VALUES (19, 'Hannah Arendt', '22th South Avenue','F', '19-11-2011',3, 14, 6, 6, 'CAN', 4460);
 
@@ -594,7 +594,7 @@ UPDATE itens_pedido i
 -- Atualizando o total dos pedidos
 UPDATE pedido ped
     SET ped.vl_total_ped = (
-        SELECT sum(i.qtde_pedida*i.preco_item*(100-i.descto_item)/100) 
+        SELECT sum(i.qtde_pedida*i.preco_item*(100-i.descto_item)/100)
         FROM itens_pedido i, produto p
         WHERE ped.num_ped = i.num_ped
         AND i.cod_prod = p.cod_prod
@@ -623,7 +623,7 @@ SELECT cod_cli_pf AS Cod,
         FROM cliente_pj;
 
 -- Alterações (pedido)
-ALTER TABLE itens_pedido ADD situacao_item CHAR(15) 
+ALTER TABLE itens_pedido ADD situacao_item CHAR(15)
     CHECK (
         situacao_item IN ( 'SEPARACAO', 'ENTREGUE', 'CANCELADO', 'DESPACHADO')
     );
@@ -690,7 +690,7 @@ AFTER INSERT OR UPDATE OR DELETE ON produto
                     null,
                     :NEW.preco_venda
                 );
-        ELSIF 
+        ELSIF
             UPDATING THEN
             INSERT INTO auditoria_produto VALUES (
                 log_produto.nextval ,
@@ -727,7 +727,12 @@ BEFORE INSERT OR UPDATE ON pedido
             ON (c.cod_cargo = f.cod_cargo)
             WHERE f.cod_func = :NEW.cod_func_vendedor;
         IF UPPER(vcargo) NOT LIKE '%VENDEDOR%' THEN
-            RAISE_APPLICATION_ERROR ( -20003, 'Funcionario '||TO_CHAR(:NEW.cod_func_vendedor)||' nao eh Vendedor !!!!');
+            RAISE_APPLICATION_ERROR (
+                -20003,
+                'Funcionario ' ||
+                TO_CHAR(:NEW.cod_func_vendedor) ||
+                ' nao eh Vendedor.'
+            );
         END IF;
     END;
 
@@ -741,7 +746,10 @@ BEFORE INSERT OR UPDATE ON funcionario
     FOR EACH ROW
     BEGIN
         IF :NEW.dt_admissao < current_date THEN
-            RAISE_APPLICATION_ERROR ( -20003, ' Data de admissão deve ser maior ou igual à data atual !!');
+            RAISE_APPLICATION_ERROR (
+                -20003,
+                'Data de admissão deve ser maior ou igual à data atual.'
+            );
         END IF;
     END ;
 
@@ -752,7 +760,12 @@ BEFORE INSERT OR UPDATE OF vl_descto_ped ON pedido
     FOR EACH ROW
     BEGIN
         IF :NEW.vl_descto_ped > (:NEW.vl_total_ped*20)/100 THEN
-            RAISE_APPLICATION_ERROR ( -20004, ' Valor do desconto ultrapassa 20% do valor do pedido !!!!. Aplique um desconto menor !');
+            RAISE_APPLICATION_ERROR (
+                -20004,
+                'Valor do desconto ultrapassa 20% do valor do pedido.' ||
+                ' Aplique um desconto menor.'
+
+            );
         END IF ;
     END ;
 
@@ -844,7 +857,7 @@ CREATE OR REPLACE TRIGGER gera_log_item
                 null,
                 :OLD.situacao_item,
                 :NEW.situacao_item
-            );     
+            );
         END IF;
     END gera_log_item ;
 
@@ -855,10 +868,10 @@ CREATE OR REPLACE TRIGGER gera_log_item
 CREATE OR REPLACE trigger valida_vendedor_regiao
 BEFORE INSERT OR UPDATE ON pedido
     FOR EACH ROW
-    DECLARE rvendor regiao.cod_regiao%TYPE; 
+    DECLARE rvendor regiao.cod_regiao%TYPE;
     DECLARE rcliente regiao.cod_regiao%TYPE;
     BEGIN
-        SELECT c.cod_regiao INTO rcliente 
+        SELECT c.cod_regiao INTO rcliente
             FROM cliente c
             WHERE c.cod_cli =: NEW.cod_cli;
         SELECT f.cod_regiao INTO rvendor
@@ -872,8 +885,8 @@ BEFORE INSERT OR UPDATE ON pedido
         END IF;
     END;
 
--- 2 - Validação para primeiro salário de um novo vendedor não seja o maior 
-CREATE OR REPLACE TRIGGER valida_salario_cargo 
+-- 2 - Validação para primeiro salário de um novo vendedor não seja o maior
+CREATE OR REPLACE TRIGGER valida_salario_cargo
 BEFORE INSERT OR UPDATE ON funcionario
     FOR EACH ROW
     DECLARE vmaior_sal funcionario.salario%TYPE;
@@ -891,7 +904,7 @@ BEFORE INSERT OR UPDATE ON funcionario
     END ;
 
 -- 3 - Validação para o funcionário não ser gerente de outro funcionário quando este primeiro já não for gerente
-CREATE OR REPLACE TRIGGER valida_gerente 
+CREATE OR REPLACE TRIGGER valida_gerente
 BEFORE INSERT OR UPDATE ON funcionario
     FOR EACH ROW
     DECLARE vcargo cargo.nome_cargo%TYPE;
@@ -935,11 +948,11 @@ CREATE OR REPLACE FUNCTION qtde_pedidos (
     vsetem SMALLINT := 0;
     BEGIN
         vqtde.EXTEND(2);
-        SELECT COUNT(*) INTO vsetem 
+        SELECT COUNT(*) INTO vsetem
             FROM cliente
             WHERE upper(nome_fantasia) LIKE vargumento;
         IF vsetem = 1 THEN
-            SELECT COUNT(*), SUM(p.vl_total_ped)  INTO vqtde(1), vqtde(2) 
+            SELECT COUNT(*), SUM(p.vl_total_ped)  INTO vqtde(1), vqtde(2)
                 FROM pedido p, cliente c
                 WHERE p.cod_cli = c.cod_cli
                 AND UPPER(nome_fantasia) LIKE vargumento
@@ -961,7 +974,7 @@ CREATE OR REPLACE FUNCTION qtde_pedidos (
             RAISE_APPLICATION_ERROR(
                 -20029,
                 'Cliente não encontrado.'
-            ); 
+            );
         END;
 
 -- 2    Elabore uma função que retorne o valor total
@@ -974,7 +987,7 @@ CREATE OR REPLACE FUNCTION qtde_pedidos (
 --      Considere que na tabela de cargo existe o cargo
 --      Gerente Vendas. Faça as validações necessárias.
 CREATE OR REPLACE FUNCTION total_gerente_vendas (
-    vgerente IN funcionario.cod_func%TYPE, 
+    vgerente IN funcionario.cod_func%TYPE,
     vini IN pedido.dt_hora_ped%TYPE,
     vfim IN pedido.dt_hora_ped%TYPE
 ) RETURN NUMBER IS
@@ -1007,7 +1020,7 @@ CREATE OR REPLACE FUNCTION total_gerente_vendas (
 --      e término do período, e o percentual de comissão
 --      (esse dado não tem o banco), ou seja, o total das
 --      comissões baseado nos pedidos de um período de tempo.
---      Faça as seguintes validações : 
+--      Faça as seguintes validações :
 --      I) comissão não pode ser negativa nem passar de 100% ;
 --      II) data final maior ou igual à data inicial do período
 --          e não podem ser nulas (se forem nulas considere a
@@ -1017,7 +1030,7 @@ CREATE OR REPLACE FUNCTION total_gerente_vendas (
 CREATE OR REPLACE FUNCTION comissao_vendedor (
     vvendor IN pedido.cod_func_vendedor%TYPE,
     vini IN pedido.dt_hora_ped%TYPE,
-    vfim IN pedido.dt_hora_ped%TYPE, 
+    vfim IN pedido.dt_hora_ped%TYPE,
     vcomissao IN NUMBER
 ) RETURN NUMBER IS
     vtotal_comissao pedido.vl_total_ped%TYPE;

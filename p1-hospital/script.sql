@@ -742,13 +742,32 @@ CREATE OR REPLACE TRIGGER gerar_log_aplic_med
     END gerar_log_aplic_med;
 
 -- 4    Implemente uma função que retorne a quantidade
---      de pacientes internados atualmentepara um
+--      de pacientes internados atualmente para um
 --      determinado motivo de internação, por exemplo,
 --      Crise Renal ou Infarto, etc., passando como
 --      parâmetro parte do motivo de internação. Faça
 --      os tratamentos necessários.
-
-
+CREATE OR REPLACE FUNCTION qtde_internados (
+    vl_motivo_internacao internacao.motivo%TYPE
+) RETURN NUMBER IS
+    vl_qtde_internados := 0;
+    motivo internacao.motivo%TYPE :=
+        '%' ||
+        UPPER(vl_motivo_internacao) ||
+        '%';
+    BEGIN
+        SELECT COUNT(internacao.num_internacao)
+            INTO vl_qtde_internados
+            FROM internacao
+            WHERE UPPER(internacao.motivo) LIKE motivo;
+        RETURN vl_qtde_internados;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(
+                -20102,
+                'Dados não encontrados.'
+            );
+        END;
 
 /* ####################### */
 /* Atividade P1 - Parte #2 */

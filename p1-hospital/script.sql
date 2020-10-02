@@ -619,38 +619,57 @@ SELECT COUNT (*) as internacao FROM INTERNACAO;
 --      inclusões/atualizações nas tabelas de Médico
 --      Efetivo e Residente baseado no tipo de
 --      contrato (tabela Médico)
-CREATE OR REPLACE TRIGGER validacao_med_redidente
-    BEFORE INSERT OR UPDATE ON medico_residente
-    DECLARE vl_tipo_contrato medico.tipo_contrato%TYPE;
+CREATE OR REPLACE TRIGGER valida_efetivo
+    BEFORE INSERT OR UPDATE ON medico_efetivo
     FOR EACH ROW
+    DECLARE vtipo_contrato medico.tipo_contrato%TYPE;
     BEGIN
-        SELECT medico.tipo_contrato
-            INTO vl_tipo_contrato
-            WHERE medico.crm = :NEW.crm_residente
-        IF vl_tipo_contrato NOT LIKE 'RESIDENTE' THEN
+        SELECT tipo_contrato
+            INTO vtipo_contrato
+            FROM medico
+            WHERE crm = :NEW.crm_efetivo;
+        IF UPPER(vtipo_contrato) NOT LIKE '%EFET%' THEN
             RAISE_APPLICATION_ERROR (
                 -20001,
-                'Médico com CRM ' ||
-                TO_CHAR(:NEW.crm_residente) ||
-                ' não é médico residente.'
+                'Médico ' ||
+                TO_CHAR(:NEW.crm_efetivo) ||
+                ' não é efetivo.'
             );
         END IF;
     END;
 
-CREATE OR REPLACE TRIGGER validacao_med_efetivo
-    BEFORE INSERT OR UPDATE ON medico_efetivo
+CREATE OR REPLACE TRIGGER valida_residente
+    BEFORE INSERT OR UPDATE ON medico_residente
     FOR EACH ROW
-    DECLARE vl_tipo_contrato medico.tipo_contrato%TYPE;
+    DECLARE vcontagem_efetivo SMALLINT := 0;
+    DECLARE vtipo_contrato medico.tipo_contrato%TYPE;
     BEGIN
-        SELECT medico.tipo_contrato
-            INTO vl_tipo_contrato
-            WHERE medico.crm = :NEW.crm_efetivo
-        IF vl_tipo_contrato NOT LIKE 'EFETIVO' THEN
+        SELECT tipo_contrato
+            INTO vtipo_contrato
+            FROM medico
+            WHERE crm = :NEW.crm_residente;
+        SELECT COUNT(*)
+            INTO vcontagem_efetivo
+            FROM medico_efetivo
+            WHERE crm_efetivo = :NEW.crm_efetivo_orientador;
+        IF UPPER(vtipo_contrato) NOT LIKE '%RESID%' THEN
             RAISE_APPLICATION_ERROR (
-                -20001,
-                'Médico com CRM ' ||
+                -20002,
+                'Medico ' ||
                 TO_CHAR(:NEW.crm_residente) ||
-                ' não é médico efetivo.'
+                ' nao e residente.'
+            );
+        ELSIF vcontagem_efetivo != 1 THEN
+            RAISE_APPLICATION_ERROR (
+                -20003,
+                'Orientador ' ||
+                TO_CHAR(:NEW.crm_efetivo_orientador) ||
+                ' nao localizado na tabela Medico Efetivo.'
+            );
+        ELSIF :NEW.crm_residente = :NEW.crm_efetivo_orientador THEN
+            RAISE_APPLICATION_ERROR (
+                -20004,
+                'Medico nao pode orientar a si mesmo.'
             );
         END IF;
     END;
@@ -659,21 +678,26 @@ CREATE OR REPLACE TRIGGER validacao_med_efetivo
 -- 2    Implemente um controle que evite que um
 --      paciente seja internado em um leito-quarto
 --      que ainda esteja ocupado.
-CREATE OR REPLACE TRIGGER validacao_interncao
+CREATE OR REPLACE TRIGGER uso_leito
     BEFORE INSERT OR UPDATE ON internacao
     FOR EACH ROW
-    DECLARE vl_num_internacao internacao.num_internacao%TYPE
+    DECLARE PRAGMA AUTONOMOUS_TRANSACTION;
+    DECLARE vuso INTEGER := 0;
     BEGIN
-        SELECT COUNT(internacao.num_internacao)
-            INTO vl_num_internacao
-            WHERE internacao.num_leito = :NEW.num_leito
-            AND internacao.cod_paciente = :NEW.cod_paciente;
-        IF vl_num_internacao >= 1 THEN
+        SELECT COUNT(*)
+            INTO vuso
+            FROM internacao
+            WHERE num_leito = :NEW.num_leito
+                AND num_qto = :NEW.num_qto
+                AND dt_hora_saida IS NULL;
+        IF vuso <> 0 AND ( INSERTING OR UPDATING('num_leito')) THEN
             RAISE_APPLICATION_ERROR (
-                -20001,
-                'Leito ' ||
+                -20006,
+                'Leito-quarto ' ||
                 TO_CHAR(:NEW.num_leito) ||
-                ' já está ocupado.'
+                '-' ||
+                TO_CHAR(:NEW.num_qto) ||
+                ' já esta sendo usado.'
             );
         END IF;
     END;
@@ -681,65 +705,65 @@ CREATE OR REPLACE TRIGGER validacao_interncao
 -- 3    Implemente um controle para registrar em
 --      log as aplicações de medicamento (dar o
 --      remédio).
-DROP TABLE auditoria_aplic_med CASCADE CONSTRAINTS;
-CREATE TABLE auditoria_aplic_med (
-    id_log INTEGER PRIMARY KEY,
-    acao CHAR(20) CHECK (
-        acao IN (
-            'INSERCAO','ATUALIZACAO_APLICADOR','ATUALIZACAO_PRESCRICAO'
-        )
-    ) NOT NULL,
-    data_hora_aplicacao TIMESTAMP NOT NULL,
-    aplicacao INTEGER,
-    old_aplicador CHAR(15),
-    new_aplicador CHAR(15),
-    old_prescricao INTEGER
-    new_prescricao INTEGER
+DROP TABLE log_aplicacao cascade constraints;
+CREATE TABLE  log_aplicacao (
+    num_log NUMBER primary key ,
+    usuario varchar2(32) not null,
+    dt_hora_operacao timestamp,
+    operacao char(22),
+    internacao_id integer,
+    prescricao_id INTEGER,
+    medicamento_id VARCHAR2(50),
+    aplicacao_id integer,
+    dt_hora_aplicacao timestamp,
+    aplicador_antes CHAR(20),
+    aplicador_depois CHAR(20)
 );
 
-DROP SEQUENCE log_aplic_med;
-CREATE SEQUENCE log_aplic_med START WITH 1000;
+DROP SEQUENCE log_aplic;
+CREATE SEQUENCE log_aplic START WITH 20000;
 
-DROP TRIGGER gerar_log_aplic_med
-CREATE OR REPLACE TRIGGER gerar_log_aplic_med
-    AFTER INSERT IN aplicacao
+CREATE OR REPLACE trigger gera_log_aplicacao
+    AFTER UPDATE OR INSERT ON aplicacao
     FOR EACH ROW
+    DECLARE vinterna prescricao.num_internacao%TYPE;
+    DECLARE vremedio medicamento.nome_medicamento%TYPE;
     BEGIN
+        SELECT p.num_internacao, m.nome_medicamento
+            INTO vinterna, vremedio
+            FROM prescricao p, medicamento m
+            WHERE p.num_prescricao = :NEW.num_prescricao
+                AND p.cod_medicamento = m.cod_medicamento;
         IF INSERTING THEN
-            INSERT INTO auditoria_aplic_med VALUES (
-                log_aplic_med.NEXTVAL,
-                'INSERCAO',
-                CURRENT_TIMESTAMP,
-                :OLD.num_aplicacao
+            INSERT INTO log_aplicacao VALUES (
+                log_aplic.nextval,
+                USER,
+                SYSDATE,
+                'Nova aplicacao',
+                vinterna,
+                :NEW.num_prescricao,
+                vremedio,
+                :NEW.num_aplicacao,
+                :NEW.dt_hora_aplicacao,
                 null,
-                :NEW.aplicado_por,
-                null,
-                :NEW.num_prescricao
+                :NEW.aplicado_por
             );
         ELSIF UPDATING ('aplicado_por') THEN
-            INSERT INTO auditoria_aplic_med VALUES (
-                log_aplic_med.NEXTVAL,
-                'ATUALIZACAO_APLICADOR',
-                CURRENT_TIMESTAMP,
-                :OLD.num_aplicacao,
-                :OLD.aplicado_por,
-                :NEW.aplicado_por,
-                null,
-                null,
-            );
-        ELSIF UPDATING ('num_prescricao') THEN
-            INSERT INTO auditoria_aplic_med VALUES (
-                log_aplic_med.NEXTVAL,
-                'ATUALIZACAO_APLICADOR',
-                CURRENT_TIMESTAMP,
-                :OLD.num_aplicacao,
-                null,
-                null,
+            INSERT INTO log_aplicacao VALUES (
+                log_aplic.nextval,
+                USER,
+                SYSDATE,
+                'Atualiza aplicador',
+                vinterna,
                 :OLD.num_prescricao,
-                :NEW.num_prescricao,
+                vremedio,
+                :OLD.num_aplicacao,
+                :OLD.dt_hora_aplicacao,
+                :OLD.aplicado_por,
+                :NEW.aplicado_por
             );
         END IF;
-    END gerar_log_aplic_med;
+    END;
 
 -- 4    Implemente uma função que retorne a quantidade
 --      de pacientes internados atualmente para um
@@ -747,25 +771,28 @@ CREATE OR REPLACE TRIGGER gerar_log_aplic_med
 --      Crise Renal ou Infarto, etc., passando como
 --      parâmetro parte do motivo de internação. Faça
 --      os tratamentos necessários.
-CREATE OR REPLACE FUNCTION qtde_internados (
-    vl_motivo_internacao internacao.motivo%TYPE
-) RETURN NUMBER IS
-    vl_qtde_internados := 0;
-    motivo internacao.motivo%TYPE :=
-        '%' ||
-        UPPER(vl_motivo_internacao) ||
-        '%';
+CREATE OR REPLACE FUNCTION qtos_pacientes_motivo (
+    vmotivo IN internacao.motivo%TYPE
+) RETURN INTEGER IS vinternados INTEGER := 0;
+    vargumento internacao.motivo%TYPE := '%'||UPPER(vmotivo)||'%';
     BEGIN
-        SELECT COUNT(internacao.num_internacao)
-            INTO vl_qtde_internados
+        SELECT NVL(COUNT(*),0)
+            INTO vinternados
             FROM internacao
-            WHERE UPPER(internacao.motivo) LIKE motivo;
-        RETURN vl_qtde_internados;
+            WHERE UPPER(motivo) LIKE vargumento
+                AND dt_hora_saida IS NULL;
+        IF vinternados = 0 THEN
+            RAISE_APPLICATION_ERROR (
+                -20012,
+                'Motivo não encontrado.'
+            );
+        END IF;
+    RETURN vinternados;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            RAISE_APPLICATION_ERROR(
-                -20102,
-                'Dados não encontrados.'
+            RAISE_APPLICATION_ERROR (
+                -20029,
+                'Motivo nao encontrado.'
             );
         END;
 

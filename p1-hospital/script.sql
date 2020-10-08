@@ -530,7 +530,7 @@ INSERT INTO aplicacao VALUES(aplicacao_seq.nextval,206,current_timestamp - 8, 'T
 INSERT INTO aplicacao VALUES(aplicacao_seq.nextval,201,current_timestamp - 47, 'Tiao', 10);
 
 
--- Constraint de unicidade em Internação para cod_paciente + dt_hora_Entrada
+-- Constraint de unicidade em Internação para cod_paciente + dt_hora_entrada
 ALTER TABLE internacao ADD UNIQUE( cod_paciente, dt_hora_entrada);
 
 DROP TABLE cirurgia CASCADE CONSTRAINTS;
@@ -828,9 +828,86 @@ CREATE OR REPLACE FUNCTION soma_perido_internacao (
 --      motivos e a quantidade de internações para
 --      cada motivo em um certo intervalo de tempo.
 --      Considere a data final como a data da alta.
+CREATE OR REPLACE TYPE lista_motivo_tipo IS OBJECT (v1 VARCHAR2(40), v2 NUMBER(22));
+CREATE OR REPLACE TYPE lista_motivo_tabela IS TABLE OF lista_motivo_tipo;
 
-
+CREATE OR REPLACE FUNCTION gerar_lista_motivo (
+    vl_ini_perido IN internacao.dt_hora_entrada%TYPE,
+    vl_fim_periodo IN internacao.dt_hora_alta%TYPE
+) RETURN lista_motivo_tabela IS
+    vl_motivo internacao.motivo%TYPE;
+    vl_internados internacao.num_leito%TYPE;
+    tb_retorno lista_motivo_tabela := lista_motivo_tabela();
+    BEGIN
+        tb_retorno.EXTEND();
+        SELECT i.motivo,
+            SUM(i.num_leito)
+        INTO vl_motivo, vl_internados
+        FROM internacao i
+        WHERE i.dt_hora_alta <= vl_fim_periodo
+            AND i.dt_hora_entrada >= vl_ini_perido
+            GROUP BY motivo;
+        tb_retorno(1) := lista_motivo_tipo(vl_motivo, vl_internados);
+        RETURN tb_retorno;
+    END;
 
 -- 7    Elabore uma procedure com cursor para gerar
 --      um extrato dos exames médicos de uma determinada
 --      internação
+CREATE OR REPLACE PROCEDURE gerar_extrato_medico (
+    vl_internacao IN internacao.num_internacao%TYPE,
+	vl_ini_periodo IN internacao.dt_hora_entrada%TYPE,
+	vl_fim_periodo IN internacao.dt_hora_saida%TYPE
+) IS CURSOR extrato IS
+    SELECT e.num_exame, e.laudo_exame, e.dt_hora_exame, t.tipo_exame, t.custo_exame
+        FROM internacao i
+        JOIN exame_med e ON (i.num_internacao = e.num_internacao)
+        JOIN tipo_exame t ON (e.cod_tipo_exame = t.cod_tipo_exame)
+        WHERE i.num_internacao = vl_internacao
+            AND e.dt_hora_exame BETWEEN vl_ini_periodo AND vl_fim_periodo;
+    vl_exame VARCHAR2(100);
+    vl_internacao VARCHAR2(100);
+    vl_acumulado tipo_exame.custo_exame%TYPE := 0;
+    vl_cabecalho VARCHAR2(100) := 'Exame              Data/Hora Exame                   Laudo   			Tipo			     Valor Exame		     Total';
+    BEGIN
+        SELECT 'Internacao: ' ||
+            TO_CHAR(i.num_internacao) ||
+            ' ' ||
+            p.nome_pac ||
+            ' - ' ||
+            i.motivo ||
+            ' - Dr.(ª) ' ||
+            m.nome_med
+            INTO vl_exame
+            FROM internacao i JOIN paciente p ON ( p.cod_paciente = i.cod_paciente)
+            JOIN exame_med e ON (e.num_internacao = i.num_internacao)
+			JOIN medico_efetivo med_ef ON (med_ef.crm_efetivo = i.crm_responsavel)
+			JOIN medico m ON (m.crm = med_ef.crm_efetivo)
+            WHERE i.num_internacao = vl_internacao
+                AND ROWNUM <= 1;
+        SELECT 'Período: ' ||
+            TO_CHAR(vl_ini_periodo, 'DD/MON/YYYY') ||
+            ' a ' ||
+            TO_CHAR(vl_fim_periodo, 'DD/MON/YYYY')
+            INTO vl_internacao
+            FROM dual;
+        DBMS_OUTPUT.PUT_LINE (vl_exame);
+        DBMS_OUTPUT.PUT_LINE (vl_internacao);
+        DBMS_OUTPUT.PUT_LINE (vl_cabecalho);
+        FOR k IN extrato LOOP
+            vl_acumulado := vl_acumulado + k.custo_exame;
+            DBMS_OUTPUT.PUT_LINE (
+                TO_CHAR(k.num_exame) ||
+                '          ' ||
+                TO_CHAR(k.dt_hora_exame) ||
+                '             ' ||
+                k.laudo_exame ||
+                '                   ' ||
+                k.tipo_exame ||
+                '                     ' ||
+                NVL(k.custo_exame, 0) ||
+                '                             ' ||
+                NVL(vl_acumulado, 0)
+            );
+        END LOOP;
+    END;

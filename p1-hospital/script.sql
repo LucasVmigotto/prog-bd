@@ -807,7 +807,21 @@ CREATE OR REPLACE FUNCTION qtos_pacientes_motivo (
 --      Retorno:        soma dos intervalos (duração)
 --                      entre a data hora entrada e data
 --                      hora de alta de cada internação
-
+CREATE OR REPLACE FUNCTION soma_perido_internacao (
+    vl_paciente_id in internacao.cod_paciente%TYPE;
+    vl_ini_internacao in internacao.dt_hora_entrada%TYPE;
+    vl_fim_internacao in internacao.dt_hora_saida%TYPE;
+) RETURN NUMBER IS
+    vl_total_dias INTEGER := 0;
+    BEGIN
+        SELECT SUM(i.dt_hora_entrada - i.dt_hora_saida DAYS)
+            INTO vl_total_dias
+            FROM internacao i
+            WHERE i.cod_paciente = vl_paciente_id
+                AND i.dt_hora_entrada >= vl_ini_internacao
+                AND i.dt_hora_saida <= vl_fim_internacao
+        RETURN vl_total_dias;
+    END;
 
 
 -- 6    Implemente uma função que retorne todos os

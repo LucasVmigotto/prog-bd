@@ -740,7 +740,7 @@ BEFORE INSERT OR UPDATE ON pedido
 /*      Atividade #1      */
 /* ###################### */
 -- 1 - Validar data de admissão de funcionário maior ou igual a data atual
-DROP TRIGGER valida_data_admissao ;
+DROP TRIGGER valida_data_admissao;
 CREATE OR REPLACE TRIGGER valida_data_admissao
 BEFORE INSERT OR UPDATE ON funcionario
     FOR EACH ROW
@@ -751,7 +751,7 @@ BEFORE INSERT OR UPDATE ON funcionario
                 'Data de admissão deve ser maior ou igual à data atual.'
             );
         END IF;
-    END ;
+    END;
 
 -- 2 - Evitar que o valor do desconto de um pedido seja maior que 20% do valor do pedido
 DROP TRIGGER valida_limita_desconto
@@ -766,8 +766,8 @@ BEFORE INSERT OR UPDATE OF vl_descto_ped ON pedido
                 ' Aplique um desconto menor.'
 
             );
-        END IF ;
-    END ;
+        END IF;
+    END;
 
 -- 3 - Gerar log para atualização de status de pedido
 DROP TABLE auditoria_item CASCADE CONSTRAINTS;
@@ -790,10 +790,10 @@ CREATE TABLE auditoria_item (
     new_situacao VARCHAR2(20)
 );
 
-DROP SEQUENCE log_item ;
-CREATE sequence log_item start with 1000 ;
+DROP SEQUENCE log_item;
+CREATE sequence log_item start with 1000;
 
-DROP TRIGGER gera_log_item ;
+DROP TRIGGER gera_log_item;
 CREATE OR REPLACE TRIGGER gera_log_item
     AFTER UPDATE OR INSERT ON itens_pedido
     FOR EACH ROW
@@ -859,7 +859,7 @@ CREATE OR REPLACE TRIGGER gera_log_item
                 :NEW.situacao_item
             );
         END IF;
-    END gera_log_item ;
+    END gera_log_item;
 
 /* ###################### */
 /*      Atividade #2      */
@@ -901,7 +901,7 @@ BEFORE INSERT OR UPDATE ON funcionario
                 'Salario não pode ultrapassar o teto para o cargo.'
             );
         END IF;
-    END ;
+    END;
 
 -- 3 - Validação para o funcionário não ser gerente de outro funcionário quando este primeiro já não for gerente
 CREATE OR REPLACE TRIGGER valida_gerente
@@ -928,8 +928,8 @@ BEFORE INSERT OR UPDATE ON funcionario
                 TO_CHAR(:NEW.cod_regiao) ||
                 ' do  funcionário.'
             );
-        END IF ;
-    END ;
+        END IF;
+    END;
 
 /* ###################### */
 /*      Atividade #3      */
@@ -1022,7 +1022,7 @@ CREATE OR REPLACE FUNCTION total_gerente_vendas (
 --      (esse dado não tem o banco), ou seja, o total das
 --      comissões baseado nos pedidos de um período de tempo.
 --      Faça as seguintes validações :
---      I) comissão não pode ser negativa nem passar de 100% ;
+--      I) comissão não pode ser negativa nem passar de 100%;
 --      II) data final maior ou igual à data inicial do período
 --          e não podem ser nulas (se forem nulas considere a
 --          data final como a data atual e a data inicial 1
@@ -1083,3 +1083,190 @@ CREATE OR REPLACE FUNCTION comissao_vendedor (
                 'Dados não encontrados.'
             );
         END;
+
+/* ###################### */
+/*      Atividade #4      */
+/* ###################### */
+-- 1    Modifique a trigger composta realizada
+--      em aula  - atualizar a situação do
+--      pedido - para tratar a situação de um
+--      novo pedido em que ainda não foram
+--      cadastrados os itens. Estenda o tratamento
+--      para qualquer alteração na situação do
+--      pedido se refletir também nos itens,
+--      por exemplo, se cancelar o pedido cancela
+--      os itens também. Para tanto as restrições
+--      de verificação nas duas tabelas para a
+--      situação tem que ser iguais (mesmo texto).
+ALTER TABLE itens_pedido
+    DROP CONSTRAINT chk_situacao_item;
+UPDATE itens_pedido
+    SET situacao_item = 'EM SEPARACAO'
+    WHERE situacao_item = 'SEPARACAO';
+ALTER TABLE itens_pedido
+    ADD CONSTRAINT chk_situacao_item
+    CHECK (
+        situacao_item IN (
+            'APROVADO', 'REJEITADO', 'EM SEPARACAO', 'DESPACHADO', 'ENTREGUE', 'CANCELADO'
+        )
+    );
+
+CREATE OR REPLACE TRIGGER atualiza_situacao_pedido
+    FOR INSERT OR UPDATE OF situacao_ped, dt_hora_entrega ON pedido
+    COMPOUND TRIGGER
+        linha_alterada rowid;
+        vsitu_nova pedido.situacao_ped%TYPE;
+        vsitu_antes pedido.situacao_ped%TYPE;
+    AFTER EACH ROW IS  -- declaração de disparo em nível de linha
+    BEGIN
+        linha_alterada := :NEW.rowid;
+        vsitu_antes := :OLD.situacao_ped;
+        vsitu_nova := NVL(:NEW.situacao_ped, 'EM SEPARACAO');
+        DBMS_OUTPUT.PUT_LINE ('situação antes '||vsitu_antes||' nova '||vsitu_nova );
+        IF :NEW.dt_hora_entrega IS NOT NULL AND :OLD.dt_hora_entrega IS NULL THEN
+            vsitu_nova := 'ENTREGUE';
+        END IF;
+        END AFTER EACH ROW;
+    AFTER STATEMENT IS
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE (
+            'No túnel para chamar a procedure : ' ||
+            linha_alterada ||
+            '-' ||
+            'situação antes ' ||
+            vsitu_antes ||
+            ' nova ' ||
+            vsitu_nova
+        );
+        atualiza_situacao_pedido_proc(linha_alterada, vsitu_nova, vsitu_antes);
+    END AFTER STATEMENT;
+END;
+
+CREATE OR REPLACE PROCEDURE atualiza_situacao_pedido_proc (
+    vlinha IN VARCHAR2,
+    vsituacao IN pedido.situacao_ped%TYPE,
+    vantes IN pedido.situacao_ped%TYPE
+) IS vpedido pedido.num_ped%TYPE;
+    CURSOR c_itens IS SELECT * FROM itens_Pedido  WHERE num_ped = vpedido;
+    vitens SMALLINT := 0;
+    linhaitem c_itens%ROWTYPE;
+    BEGIN
+        SELECT num_ped INTO vpedido FROM pedido WHERE rowid = vlinha;
+        DBMS_OUTPUT.PUT_LINE(
+            'Antes de testar se situacao mudou -> situação antes ' ||
+            vantes ||
+            ' nova ' ||
+            vsituacao
+        );
+        IF vsituacao <> vantes THEN
+            DBMS_OUTPUT.PUT_LINE (
+                'situacao mudou, atualizando o pedido ' ||
+                vpedido
+            );
+            UPDATE pedido SET situacao_ped = vsituacao
+                WHERE rowid = vlinha;
+        END IF;
+        OPEN  c_itens;
+        LOOP
+            FETCH c_itens INTO linhaitem;
+            EXIT WHEN c_itens%NOTFOUND;
+            IF (c_itens%FOUND) THEN
+                DBMS_OUTPUT.PUT_LINE('Existem itens para esse pedido');
+            ELSE
+                DBMS_OUTPUT.PUT_LINE('Ainda NAO existem itens para esse pedido');
+                EXIT;
+            END IF;
+            DBMS_OUTPUT.PUT_LINE ('abriu o cursor dos itens...');
+            IF  linhaitem.situacao_item <> 'CANCELADO' AND linhaitem.situacao_item <> vsituacao THEN
+                UPDATE itens_pedido i  SET i.situacao_item = vsituacao
+                    WHERE linhaitem.num_ped = vpedido
+                    AND linhaitem.cod_prod = i.cod_prod;
+                vitens := vitens  + 1;
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE ('itens atualizados '||vitens);
+        CLOSE c_itens;
+    END;
+
+-- 2    Elabore uma procedure para mostrar
+--      os dados de venda de um produto em
+--      um intervalo de tempo, passando o
+--      nome ou parte do nome do produto.
+--      Faça TODAS as validações necessárias.
+CREATE OR REPLACE PROCEDURE vendas_produto_intervalo (
+    vprod IN produto.nome_prod%TYPE,
+    vini IN pedido.dt_hora_ped%TYPE,
+    vfim IN pedido.dt_hora_ped%TYPE, listagem OUT SYS_REFCURSOR
+) IS
+    acumulado pedido.vl_total_ped%TYPE := 0d;
+    vbusca produto.nome_prod%TYPE := '%'||UPPER(vprod)||'%';
+    vexiste SMALLINT := 0d;
+    BEGIN
+        SELECT COUNT(*)
+            INTO vexiste
+            FROM produto
+            WHERE UPPER(nome_prod) LIKE vbuscad;
+        IF vexiste = 0 THEN
+            RAISE_APPLICATION_ERROR (
+                -20100,
+                ' Produto não localizado'
+            );
+        ELSIF vexiste > 1 THEN
+            RAISE_APPLICATION_ERROR (
+                -20101,
+                ' Mais de um produto com esse nome! Refine sua busca'
+            );
+        END IF;
+        OPEN listagem FOR
+            SELECT p.num_ped AS Pedido,
+                c.nome_fantasia AS Cliente,
+                p.dt_hora_ped AS Dtpedido,
+                i.qtde_pedida AS Qtde,
+                i.preco_item AS Preco,
+                i.descto_item AS Descto,
+                (i.qtde_pedida * i.preco_item * (100 - i.descto_item)/100) AS Totalitem
+                FROM pedido p
+                JOIN cliente c ON (p.cod_cli = c.cod_cli)
+                JOIN itens_pedido i ON (i.num_ped = p.num_ped)
+                JOIN produto pr ON ( pr.cod_prod = i.cod_prod)
+                WHERE UPPER(pr.nome_prod) LIKE vbusca
+                    AND p.dt_hora_ped BETWEEN vini
+                    AND vfim
+                ORDER BY p.num_pedd;
+        END;
+        CREATE TABLE vendas_produto_proc AS
+            SELECT p.num_ped AS Pedido,
+                c.nome_fantasia AS Cliente,
+                p.dt_hora_ped AS Dtpedido,
+                i.qtde_pedida AS Qtde,
+                i.preco_item AS Preco,
+                i.descto_item AS Descto,
+                (i.qtde_pedida*i.preco_item*(100 - i.descto_item)/100) AS Totalitem
+                FROM pedido p JOIN cliente c ON ( p.cod_cli = c.cod_cli)
+                JOIN itens_pedido i ON (i.num_ped = p.num_ped)
+                JOIN produto pr ON ( pr.cod_prod = i.cod_prod);
+        DECLARE
+            vacumulado pedido.vl_total_ped%TYPE := 0;
+            vendas_produto SYS_REFCURSOR;
+            linha_prod vendas_produto_proc%ROWTYPE;
+            vcabecalho VARCHAR2(100) := 'Pedido     Cliente      Data    Qtde Pedida   Preço Item   Desconto    Total Item    Total Vendas';
+            BEGIN
+                vendas_produto_intervalo('mundo', current_date - 500, current_date, vendas_produto);
+                DBMS_OUTPUT.PUT_LINE (vcabecalho);
+                LOOP
+                    FETCH vendas_produto INTO linha_prodd;
+                    EXIT WHEN vendas_produto%NOTFOUNDd;
+                    vacumulado := vacumulado + linha_prod.Totalitemd;
+                    DBMS_OUTPUT.PUT_LINE (
+                        RPAD(TO_CHAR(linha_prod.Pedido), 8, ' ') ||
+                        RPAD(linha_prod.Cliente, 14, ' ') ||
+                        RPAD ( TO_CHAR ( linha_prod.Dtpedido, 'DD/MON'),14,' ') ||
+                        RPAD ( TO_CHAR ( linha_prod.Qtde),11,' ') ||
+                        RPAD ( TO_CHAR ( linha_prod.Preco, '$9999D99'),15,' ') ||
+                        RPAD ( TO_CHAR ( linha_prod.Descto, '999D99'),10,' ') ||
+                        RPAD ( TO_CHAR ( linha_prod.Totalitem, '$99999D99'),14, ' ') ||
+                        TO_CHAR ( vacumulado, '$99999D99')
+                    );
+                END LOOP;
+        CLOSE vendas_produtod;
+    END;

@@ -1,3 +1,15 @@
+/* ######################################################## */
+/*  FATEC Ipiranga - Análise e Desenvolvimento de Sistemas  */
+/*  Programação para Banco de Dados - Projeto P2            */
+/*                                                          */
+/*  Nome: Lucas Vidor Migotto                               */
+/* ######################################################## */
+
+/* parametros de configuracao da sessao */
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD-MM-YYYY HH24:MI:SS';
+ALTER SESSION SET NLS_LANGUAGE = PORTUGUESE;
+SELECT SESSIONTIMEZONE, CURRENT_TIMESTAMP FROM DUAL;
+
 /* ####################### */
 /* Atividade P2 - Parte #1 */
 /* ####################### */

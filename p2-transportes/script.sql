@@ -41,6 +41,15 @@ CREATE TABLE linha_viagem (
 -- 2.3  Tabela para a viagem(identificador da
 --      viagem, linha, datas e horários e o
 --      veículo utilizado)
+DROP TABLE viagem CASCADE CONSTRAINTS;
+CREATE TABLE viagem (
+    cod_viagem PRIMARY KEY,
+    cod_linha_viagem INTEGER NOT NULL,
+    num_veiculo INTEGER NOT NULL,
+    dt_programada TIMESTAMP NOT NULL,
+    dt_inicio_viagem TIMESTAMP NOT NULL,
+    dt_fim_viagem TIMESTAMP NOT NULL
+);
 
 -- 2.4  Converta todos os identificadores
 --      hexadecimais em decimais

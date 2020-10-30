@@ -28,6 +28,15 @@ CREATE TABLE local (
 --      referências aos respectivos
 --      identificadores de origem e
 --      destino, etc.)
+DROP TABLE linha_viagem CASCADE CONSTRAINTS;
+CREATE TABLE linha_viagem (
+    cod_linha_viagem PRIMARY KEY,
+    empresa VARCHAR2(20) NOT NULL,
+    cod_local_origem INTEGER NOT NULL,
+    cod_local_destino INTEGER NOT NULL,
+    sentido_linha VARCHAR(5) NOT NULL,
+    tipo_viagem VARCHAR(7) NOT NULL
+);
 
 -- 2.3  Tabela para a viagem(identificador da
 --      viagem, linha, datas e horários e o

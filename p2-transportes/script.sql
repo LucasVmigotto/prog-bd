@@ -47,7 +47,13 @@ CREATE TABLE linha_viagem (
     cod_local_origem INTEGER NOT NULL,
     cod_local_destino INTEGER NOT NULL,
     sentido_linha VARCHAR(5) NOT NULL,
-    tipo_viagem VARCHAR(7) NOT NULL
+    tipo_viagem VARCHAR(7) NOT NULL,
+    FOREIGN KEY (cod_local_origem)
+        REFERENCES local(cod_local)
+        ON DELETE CASCADE,
+    FOREIGN KEY (cod_local_destino)
+        REFERENCES local(cod_local)
+        ON DELETE CASCADE
 );
 
 -- 2.3  Tabela para a viagem(identificador da
@@ -60,7 +66,10 @@ CREATE TABLE viagem (
     num_veiculo INTEGER NOT NULL,
     dt_programada TIMESTAMP NOT NULL,
     dt_inicio_viagem TIMESTAMP NOT NULL,
-    dt_fim_viagem TIMESTAMP NOT NULL
+    dt_fim_viagem TIMESTAMP NOT,
+    FOREIGN KEY (cod_linha_viagem)
+        REFERENCES viagem(cod_linha_viagem)
+        ON DELETE CASCADE
 );
 
 -- 2.4  Converta todos os identificadores

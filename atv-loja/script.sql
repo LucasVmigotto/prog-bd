@@ -1270,3 +1270,269 @@ CREATE OR REPLACE PROCEDURE vendas_produto_intervalo (
                 END LOOP;
         CLOSE vendas_produtod;
     END;
+
+/* ###################### */
+/*      Atividade #5      */
+/* ###################### */
+-- 1    Construa um log de auditoria para
+--      reajuste de salário dos funcionários
+--      utilizando gatilho composto. Suponha
+--      que o salário é reajustado por um
+--      determinado índice para cada região de
+--      vendas - ou seja, nem sempre uma região
+--      terá reajuste junto com as outras. Registre
+--      o nome do funcionário, o nome da região e o
+--      salário anterior e o reajustado (novo),
+--      além de outros dados relevantes para o controle.
+DROP TABLE salario_log CASCADE CONSTRAINTS;
+CREATE TABLE salario_log (
+    log_id INTEGER,
+    funcionario INTEGER,
+    usuario VARCHAR2(32) ,
+    salario_antes NUMBER(10,2),
+    salario_depois NUMBER(10,2) ,
+    regiao VARCHAR2(50),
+    dt_reajuste TIMESTAMP
+);
+
+DROP SEQUENCE salario_log_seq;
+CREATE SEQUENCE salario_log_seq;
+
+CREATE OR REPLACE TRIGGER compound_salario_reajuste
+    FOR UPDATE OF salario ON funcionario
+    COMPOUND TRIGGER
+    linhaalterada ROWID;
+    TYPE salario_registro IS RECORD (
+        log_id              salario_log.log_id%TYPE,
+        funcionario     salario_log.funcionario%TYPE,
+        usuario            salario_log.usuario%TYPE ,
+        salario_antes   salario_log.salario_antes%TYPE,
+        salario_depois salario_log.salario_depois%TYPE ,
+        regiao             salario_log.regiao%TYPE,
+        dt_reajuste      salario_log.dt_reajuste%TYPE
+    );
+    TYPE salario_lista IS TABLE OF salario_registro;
+    salario_updates salario_lista := salario_lista();
+    AFTER EACH ROW IS p NUMBER;
+    usuario_id VARCHAR2(32);
+    nomeregiao VARCHAR2(50);
+    BEGIN
+        linhaalterada := :NEW.rowid;
+        SELECT user
+            INTO usuario_id
+            FROM dual;
+        SELECT get_regiao (linhaalterada)
+            INTO nomeregiao
+            FROM dual;
+        salario_updates.EXTEND;
+        p := salario_updates.LAST;
+        salario_updates(p).log_id := salario_log_seq.nextval;
+        salario_updates(p).funcionario := :OLD.cod_func;
+        salario_updates(p).usuario := usuario_id;
+        salario_updates(p).salario_antes := :OLD.salario;
+        salario_updates(p).salario_depois := :NEW.salario;
+        salario_updates(p).regiao := nomeregiao;
+        salario_updates(p).dt_reajuste := current_timestamp;
+        END AFTER EACH ROW;
+        AFTER STATEMENT IS
+        BEGIN
+            FORALL i IN salario_updates.FIRST..salario_updates.LAST
+            INSERT INTO salario_log VALUES (
+                salario_updates(i).log_id ,
+                salario_updates(i).funcionario,
+                salario_updates(i).usuario,
+                salario_updates(i).salario_antes ,
+                salario_updates(i).salario_depois,
+                salario_updates(i).regiao,
+                salario_updates(i).dt_reajuste
+            );
+        END AFTER STATEMENT;
+    END;
+
+CREATE OR REPLACE FUNCTION get_regiao (
+    vlinha IN VARCHAR2
+) RETURN VARCHAR2 IS vregiao regiao.nome_regiao%TYPE;
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+        SELECT r.nome_regiao
+            INTO vregiao
+            FROM regiao r
+            JOIN funcionario f ON (f.cod_regiao = r.cod_regiao)
+            WHERE f.rowid = vlinha;
+        RETURN vregiao;
+    END;
+
+-- 2    Reescreva a procedure da SQL Dinâmica,
+--      realizada em aula- para consultas com
+--      duas tabelas, para permitir agora utilizar
+--      três tabelas com dois filtros.
+CREATE OR REPLACE PROCEDURE lista_dinamica_3tabelas (
+    vtabela1 IN VARCHAR2,
+    vcoluna1 IN VARCHAR2,
+    vcol_juncao12 IN VARCHAR2,
+    vtabela2 IN VARCHAR2,
+    vcoluna2 IN VARCHAR2,
+    vcol_juncao21 IN VARCHAR2,
+    vcol_juncao23 IN VARCHAR2,
+    vtabela3 IN VARCHAR2,
+    vcoluna3 IN VARCHAR2,
+    vcol_juncao32 IN VARCHAR2,
+    vfiltro1 IN VARCHAR2,
+    vcompara1 IN VARCHAR2,
+    vvalor1 IN INTEGER,
+    voperador IN VARCHAR2,
+    vfiltro2 IN VARCHAR2,
+    vcompara2 IN VARCHAR2,
+    vvalor2 IN INTEGER
+) IS TYPE vteste IS REF CURSOR;
+    vCursor_tabelas3 vteste;
+    vSQLdin VARCHAR2(500);
+    vaux1 VARCHAR2(50);
+    vaux2 VARCHAR2(50);
+    vaux3 VARCHAR2(50);
+    BEGIN
+        vSQLdin :=
+            'SELECT ' ||
+            vtabela1 ||
+            '.' ||
+            vcoluna1 ||
+            ' , ' ||
+            vtabela2 ||
+            '.' ||
+            vcoluna2 ||
+            ' , ' ||
+            vtabela3 ||
+            '.' ||
+            vcoluna3 ||
+            'FROM ' ||
+            vtabela1 ||
+            ' JOIN ' ||
+            vtabela2 ||
+            'ON ' ||
+            vtabela1 ||
+            '.' ||
+            vcol_juncao12 ||
+            '=' ||
+            vtabela2 ||
+            '.' ||
+            vcol_juncao21 ||
+            'JOIN ' ||
+            vtabela3 ||
+            'ON ' ||
+            vtabela2 ||
+            '.' ||
+            vcol_juncao23 ||
+            '=' ||
+            vtabela3 ||
+            '.' ||
+            vcol_juncao32 ||
+            'WHERE ' ||
+            vfiltro1 ||
+            ' ' ||
+            vcompara1 ||
+            ' :1 ' ||
+            voperador ||
+            ' ' ||
+            vfiltro2 ||
+            ' ' ||
+            vcompara2 ||
+            ' :2 ';
+        DBMS_OUTPUT.PUT_LINE ( vSQLdin);
+        OPEN vCursor_tabelas3 FOR vSQLdin USING vvalor1, vvalor2;
+        LOOP
+            FETCH vCursor_tabelas3
+                INTO vaux1, vaux2, vaux3;
+            EXIT WHEN vCursor_tabelas3%NOTFOUND;
+            DBMS_OUTPUT.PUT_LINE ( RPAD(TRIM (vaux1), 40, ' ' )||RPAD(TRIM(vaux2), 40, ' ')||RPAD(TRIM(vaux3), 40, ' ') );
+        END LOOP;
+        CLOSE vCursor_tabelas3;
+    END;
+    BEGIN
+        lista_dinamica_3tabelas (
+            'cliente',
+            'nome_fantasia',
+            'cod_cli',
+            'pedido',
+            'vl_total_ped',
+            'cod_cli',
+            'forma_pgto',
+            'forma_pgto',
+            'descr_forma_pgto',
+            'cod_forma',
+            'vl_total_ped',
+            '<=',
+            1000,
+            'AND',
+            'limite_credito',
+            '>',
+            1000
+        );
+    END;
+
+-- 3    Crie uma nova tabela para Tamanho usando
+--      SQL Dinâmica e popule os dados com os valores
+--      distintos a partir da tabela de origem PRODUTO.
+--      Tudo em uma única procedure, função ou bloco
+--      anônimo. Posteriormente resolva com SQL estático
+--      o relacionamento entre as duas tabelas.
+SELECT DISTINCT TRIM(
+    UPPER(TO_CHAR(NVL(tamanho,'TAM')))
+    ) FROM produto;
+
+DROP SEQUENCE tam_seq;
+CREATE SEQUENCE tam_seq;
+DROP TABLE tamanho CASCADE CONSTRAINTS;
+
+CREATE OR REPLACE PROCEDURE gera_tamanho
+    AUTHID CURRENT_USER IS TYPE vtamanho IS REF CURSOR;
+    vCursortam vtamanho;
+    vdinSelect VARCHAR2(4000);
+    vdinCreate VARCHAR2(4000) :=
+        'CREATE TABLE tamanho ( cod_tam SMALLINT PRIMARY KEY, tamanho VARCHAR2(30))';
+    vdinInsert VARCHAR2(4000);
+    vtam CHAR(3);
+    vseq INTEGER;
+    BEGIN
+        vdinSelect := 'SELECT DISTINCT TRIM ( UPPER (TO_CHAR (tamanho) ) ) FROM produto';
+        EXECUTE IMMEDIATE vdinCreate;
+        OPEN vCursortam FOR vdinSelect;
+        LOOP
+            FETCH vCursortam INTO vtam;
+            EXIT WHEN vCursortam%NOTFOUND;
+            IF vtam IS NULL THEN
+                vtam := 'TAM';
+            END IF;
+            SELECT tam_seq.nextval
+                INTO vseq
+                FROM dual;
+		    vdinInsert := 'INSERT INTO tamanho VALUES ( :1, :2)';
+            EXECUTE IMMEDIATE vdinInsert USING vseq, vtam;
+        END LOOP;
+        CLOSE vCursortam;
+    END;
+
+    BEGIN
+        gera_tamanho;
+    END;
+
+ALTER TABLE produto ADD cod_tamanho SMALLINT;
+UPDATE produto p
+    SET p.cod_tamanho = (
+        SELECT t.cod_tam
+            FROM tamanho t
+            WHERE  TRIM(UPPER(p.tamanho)) = TRIM(UPPER(t.tamanho))
+    );
+
+UPDATE produto p
+    SET p.cod_tamanho = (
+        SELECT t.cod_tam
+            FROM tamanho t
+            WHERE t.tamanho = 'TAM'
+    )
+    WHERE p.tamanho IS NULL;
+
+ALTER TABLE produto
+    ADD FOREIGN KEY (cod_tamanho)
+    REFERENCES tamanho (cod_tam);
+ALTER TABLE produto
+    MODIFY cod_tamanho NOT NULL;

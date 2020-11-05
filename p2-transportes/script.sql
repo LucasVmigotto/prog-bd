@@ -25,13 +25,49 @@ SELECT SESSIONTIMEZONE, CURRENT_TIMESTAMP FROM DUAL;
 
 -- 2.1  Tabela para os locais(cidade +
 --      UF + latitude e longitude)
+DROP TABLE uf CASCADE CONSTRAINTS;
+CREATE TABLE uf (
+    cod_uf INTEGER PRIMARY KEY,
+    sigla CHAR(2) NOT NULL
+);
+
+INSERT INTO uf (sigla) VALUES (UPPER('AC'));
+INSERT INTO uf (sigla) VALUES (UPPER('AL'));
+INSERT INTO uf (sigla) VALUES (UPPER('AP'));
+INSERT INTO uf (sigla) VALUES (UPPER('AM'));
+INSERT INTO uf (sigla) VALUES (UPPER('BA'));
+INSERT INTO uf (sigla) VALUES (UPPER('CE'));
+INSERT INTO uf (sigla) VALUES (UPPER('DF'));
+INSERT INTO uf (sigla) VALUES (UPPER('ES'));
+INSERT INTO uf (sigla) VALUES (UPPER('GO'));
+INSERT INTO uf (sigla) VALUES (UPPER('MA'));
+INSERT INTO uf (sigla) VALUES (UPPER('MT'));
+INSERT INTO uf (sigla) VALUES (UPPER('MS'));
+INSERT INTO uf (sigla) VALUES (UPPER('MG'));
+INSERT INTO uf (sigla) VALUES (UPPER('PA'));
+INSERT INTO uf (sigla) VALUES (UPPER('PB'));
+INSERT INTO uf (sigla) VALUES (UPPER('PR'));
+INSERT INTO uf (sigla) VALUES (UPPER('PE'));
+INSERT INTO uf (sigla) VALUES (UPPER('PI'));
+INSERT INTO uf (sigla) VALUES (UPPER('RJ'));
+INSERT INTO uf (sigla) VALUES (UPPER('RN'));
+INSERT INTO uf (sigla) VALUES (UPPER('RS'));
+INSERT INTO uf (sigla) VALUES (UPPER('RO'));
+INSERT INTO uf (sigla) VALUES (UPPER('RR'));
+INSERT INTO uf (sigla) VALUES (UPPER('SC'));
+INSERT INTO uf (sigla) VALUES (UPPER('SP'));
+INSERT INTO uf (sigla) VALUES (UPPER('SE'));
+INSERT INTO uf (sigla) VALUES (UPPER('TO'));
+
 DROP TABLE local CASCADE CONSTRAINTS;
 CREATE TABLE local (
     cod_local INTEGER PRIMARY KEY,
-    cidade VARCHAR2(40) NOT NULL,
-    uf CHAR(2) NOT NULL,
+    cidade VARCHAR2(40) UNIQUE NOT NULL,
+    uf INTEGER NOT NULL,
     latitude NUMBER(8,5) NOT NULL,
-    longitude NUMBER(8,5) NOT NULL
+    longitude NUMBER(8,5) NOT NULL,
+    FOREIGN KEY (uf)
+        REFERENCES uf(sigla)
 );
 
 -- 2.2  Tabela para linha de viagem e
@@ -71,6 +107,49 @@ CREATE TABLE viagem (
         REFERENCES viagem(cod_linha_viagem)
         ON DELETE CASCADE
 );
+
+-- Popula a tabela de locais
+DECLARE
+    arv_data UTL_FILE.FILE_TYPE;
+    arv_linha VARCHAR2(32767);
+    cont_cidade NUMBER;
+    BEGIN
+        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
+
+    LOOP
+        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
+
+        SELECT COUNT(cod_local)
+            INTO cont_cidade
+            FROM local
+            WHERE cidade=UPPER(REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10));
+
+        IF cont_cidade = 0 THEN
+            INSERT INTO local (
+                cidade,
+                uf,
+                latitude,
+                longitude
+            ) VALUES (
+                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10),
+                (SELECT cod_uf
+                    FROM uf
+                    WHERE sigla=UPPER(
+                        REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 11)
+                    )
+                ),
+                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 12),
+                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 13),
+            );
+        END IF;
+
+    END LOOP;
+
+    UTL_FILE.FCLOSE(arv_data);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+        null;
+    END;
 
 -- 2.4  Converta todos os identificadores
 --      hexadecimais em decimais

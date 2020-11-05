@@ -183,7 +183,62 @@ DECLARE
             ),
             REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 6),
             REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 5)
-        )
+        );
+
+    END LOOP;
+
+    UTL_FILE.FCLOSE(arv_data);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+        null;
+    END;
+
+-- Popula a tabela de viagem
+DECLARE
+    arv_data UTL_FILE.FILE_TYPE;
+    arv_linha VARCHAR2(32767);
+    cod_fk_linha_viagem linha_viagem.cod_linha_viagem%TYPE;
+    cod_fk_origem local.cod_local%TYPE;
+    cod_fk_destino local.cod_local%TYPE;
+    BEGIN
+        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
+
+    LOOP
+        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
+
+        SELECT cod_local
+            INTO cod_fk_origem
+            FROM local
+            WHERE cidade=UPPER(
+                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 8)
+            );
+
+        SELECT cod_local
+            INTO cod_fk_destino
+            FROM local
+            WHERE cidade=UPPER(
+                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10)
+            );
+
+        SELECT cod_linha_viagem
+            INTO cod_fk_linha_viagem
+            FROM linha_viagem
+            WHERE cod_local_origem=cod_fk_origem
+                AND cod_local_destino=cod_fk_destino;
+
+        INSERT INTO viagem (
+            cod_linha_viagem,
+            num_veiculo,
+            dt_programada,
+            dt_inicio_viagem,
+            dt_fim_viagem
+        ) VALUES (
+            cod_fk_linha_viagem,
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 4),
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 15),
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 16),
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 17)
+        );
 
     END LOOP;
 

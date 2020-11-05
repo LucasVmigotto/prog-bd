@@ -151,5 +151,47 @@ DECLARE
         null;
     END;
 
+-- Popula a tabela de linhas de viagem
+DECLARE
+    arv_data UTL_FILE.FILE_TYPE;
+    arv_linha VARCHAR2(32767);
+    BEGIN
+        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
+
+    LOOP
+        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
+
+        INSERT INTO linha_viagem (
+            empresa,
+            cod_local_origem,
+            cod_local_destino,
+            sentido_linha,
+            tipo_viagem
+        ) VALUES (
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 2),
+            (SELECT cod_local
+                FROM local
+                WHERE cidade=UPPER(
+                    REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 8)
+                )
+            ),
+            (SELECT cod_local
+                FROM local
+                WHERE cidade=UPPER(
+                    REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10)
+                )
+            ),
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 6),
+            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 5)
+        )
+
+    END LOOP;
+
+    UTL_FILE.FCLOSE(arv_data);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+        null;
+    END;
+
 -- 2.4  Converta todos os identificadores
 --      hexadecimais em decimais

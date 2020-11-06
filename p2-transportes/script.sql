@@ -5,10 +5,12 @@
 /*  Nome: Lucas Vidor Migotto                               */
 /* ######################################################## */
 
-/* parametros de configuracao da sessao */
+-- Parâmetros de configuração da sessão
 ALTER SESSION SET NLS_DATE_FORMAT = 'DD-MM-YYYY HH24:MI:SS';
+ALTER SESSION SET NLS_NUMERIC_CHARACTERS=',.';
 ALTER SESSION SET NLS_LANGUAGE = PORTUGUESE;
-SELECT SESSIONTIMEZONE, CURRENT_TIMESTAMP FROM DUAL;
+ALTER TABLESPACE SYSTEM
+    ADD DATAFILE '\oraclexe\app\oracle\oradata\XE\system16.dbf' SIZE 500 M;
 
 /* ####################### */
 /* Atividade P2 - Parte #1 */
@@ -19,56 +21,90 @@ SELECT SESSIONTIMEZONE, CURRENT_TIMESTAMP FROM DUAL;
 --      Loader pela linha de
 --      comando.
 
+-- Tabela base
+DROP TABLE base CASCADE CONSTRAINTS;
+CREATE TABLE base (
+    codigo_viagem VARCHAR2(30),
+    empresa VARCHAR2(30),
+    num_linha VARCHAR2(30),
+    onibus	 VARCHAR2(30),
+    tipo_viagem VARCHAR2(30),
+    sentido_linha VARCHAR2(30),
+    in_transbordo VARCHAR2(30),
+    origem_cidade VARCHAR2(50),
+    origem_uf	VARCHAR2(30),
+    destino_cidade VARCHAR2(50),
+    destino_uf	 VARCHAR2(30),
+    latitude	VARCHAR2(30),
+    longitude VARCHAR2(30),
+    pdop VARCHAR2(30),
+    data_viagem_programada VARCHAR2(30),
+    data_inicio_viagem VARCHAR2(30),
+    data_fim_viagem VARCHAR2(30)
+);
+TRUNCATE TABLE base;
+
 -- 2    Monte o script completo
 --      para tratar os dados com
 --      as seguintes caraterísticas:
 
 -- 2.1  Tabela para os locais(cidade +
 --      UF + latitude e longitude)
-DROP TABLE uf CASCADE CONSTRAINTS;
-CREATE TABLE uf (
-    cod_uf INTEGER PRIMARY KEY,
-    sigla CHAR(2) NOT NULL
-);
 
-INSERT INTO uf (sigla) VALUES (UPPER('AC'));
-INSERT INTO uf (sigla) VALUES (UPPER('AL'));
-INSERT INTO uf (sigla) VALUES (UPPER('AP'));
-INSERT INTO uf (sigla) VALUES (UPPER('AM'));
-INSERT INTO uf (sigla) VALUES (UPPER('BA'));
-INSERT INTO uf (sigla) VALUES (UPPER('CE'));
-INSERT INTO uf (sigla) VALUES (UPPER('DF'));
-INSERT INTO uf (sigla) VALUES (UPPER('ES'));
-INSERT INTO uf (sigla) VALUES (UPPER('GO'));
-INSERT INTO uf (sigla) VALUES (UPPER('MA'));
-INSERT INTO uf (sigla) VALUES (UPPER('MT'));
-INSERT INTO uf (sigla) VALUES (UPPER('MS'));
-INSERT INTO uf (sigla) VALUES (UPPER('MG'));
-INSERT INTO uf (sigla) VALUES (UPPER('PA'));
-INSERT INTO uf (sigla) VALUES (UPPER('PB'));
-INSERT INTO uf (sigla) VALUES (UPPER('PR'));
-INSERT INTO uf (sigla) VALUES (UPPER('PE'));
-INSERT INTO uf (sigla) VALUES (UPPER('PI'));
-INSERT INTO uf (sigla) VALUES (UPPER('RJ'));
-INSERT INTO uf (sigla) VALUES (UPPER('RN'));
-INSERT INTO uf (sigla) VALUES (UPPER('RS'));
-INSERT INTO uf (sigla) VALUES (UPPER('RO'));
-INSERT INTO uf (sigla) VALUES (UPPER('RR'));
-INSERT INTO uf (sigla) VALUES (UPPER('SC'));
-INSERT INTO uf (sigla) VALUES (UPPER('SP'));
-INSERT INTO uf (sigla) VALUES (UPPER('SE'));
-INSERT INTO uf (sigla) VALUES (UPPER('TO'));
+SELECT
+    DISTINCT
+        origem_cidade,
+        origem_uf
+    FROM base
+    ORDER BY 1;
+SELECT
+    DISTINCT
+        destino_cidade,
+        destino_uf
+    FROM base
+    ORDER BY 1;
 
-DROP TABLE local CASCADE CONSTRAINTS;
-CREATE TABLE local (
-    cod_local INTEGER PRIMARY KEY,
-    cidade VARCHAR2(40) UNIQUE NOT NULL,
-    uf INTEGER NOT NULL,
-    latitude NUMBER(8,5) NOT NULL,
-    longitude NUMBER(8,5) NOT NULL,
-    FOREIGN KEY (uf)
-        REFERENCES uf(sigla)
-);
+-- Tabela pela origem
+CREATE TABLE origem AS
+    SELECT
+        DISTINCT
+            origem_cidade,
+            origem_uf
+        FROM base
+        ORDER BY 1;
+
+-- Tabela destino
+CREATE TABLE destino AS
+    SELECT
+        DISTINCT
+            destino_cidade,
+            destino_uf
+        FROM base
+        ORDER BY 1;
+
+-- Tabela localidade
+CREATE TABLE localidade AS
+    SELECT
+        origem_cidade AS Cidade,
+        origem_uf AS UF
+        FROM origem
+        UNION
+            SELECT
+                destino_cidade AS Cidade,
+                destino_uf AS UF
+            FROM destino;
+
+-- Ajustes
+DELETE FROM localidade WHERE cidade IN ( 'destino','origem');
+
+-- Definindo primary key
+ALTER TABLE localidade
+    ADD id_local SMALLINT;
+CREATE SEQUENCE seq_local START WITH 1;
+UPDATE localidade SET
+    id_local = seq_local.nextval;
+ALTER TABLE localidade
+    ADD CONSTRAINT pk_local PRIMARY KEY(id_local);
 
 -- 2.2  Tabela para linha de viagem e
 --      seus respectivos dados (
@@ -76,177 +112,149 @@ CREATE TABLE local (
 --      referências aos respectivos
 --      identificadores de origem e
 --      destino, etc.)
-DROP TABLE linha_viagem CASCADE CONSTRAINTS;
-CREATE TABLE linha_viagem (
-    cod_linha_viagem PRIMARY KEY,
-    empresa VARCHAR2(20) NOT NULL,
-    cod_local_origem INTEGER NOT NULL,
-    cod_local_destino INTEGER NOT NULL,
-    sentido_linha VARCHAR(5) NOT NULL,
-    tipo_viagem VARCHAR(7) NOT NULL,
-    FOREIGN KEY (cod_local_origem)
-        REFERENCES local(cod_local)
-        ON DELETE CASCADE,
-    FOREIGN KEY (cod_local_destino)
-        REFERENCES local(cod_local)
-        ON DELETE CASCADE
-);
+
+-- Tabela linha_viagem
+CREATE TABLE linha_viagem AS
+    SELECT
+        DISTINCT
+            num_linha AS Numero_Linha,
+            empresa,
+            origem_cidade,
+            origem_uf,
+            destino_cidade,
+            destino_uf
+        FROM base
+        ORDER BY empresa;
+DELETE FROM linha_viagem
+    WHERE empresa = 'empresa';
+
+-- Alterando origem e destino para foreign key localidade
+ALTER TABLE linha_viagem
+    ADD (
+        id_origem SMALLINT,
+        id_destino SMALLINT
+    );
+
+-- origem
+UPDATE linha_viagem lv SET
+    lv.id_origem=(
+        SELECT l.id_local
+            FROM localidade l
+            WHERE TRIM(UPPER(lv.origem_cidade))=TRIM(l.cidade)
+                AND TRIM(UPPER(lv.origem_uf))=TRIM(l.UF)
+    );
+
+-- destino
+UPDATE linha_viagem lv SET
+    lv.id_destino=(
+        SELECT l.id_local
+            FROM localidade l
+                WHERE TRIM(UPPER(lv.destino_cidade))=TRIM(l.cidade)
+                    AND TRIM(UPPER(lv.destino_uf))=TRIM(l.UF)
+    );
+
+-- Definindo foreign keys
+ALTER TABLE linha_viagem
+    ADD CONSTRAINT fk_origem
+        FOREIGN KEY(id_origem)
+            REFERENCES localidade(id_local);
+
+ALTER TABLE linha_viagem
+    ADD CONSTRAINT fk_destino
+        FOREIGN KEY(id_destino)
+            REFERENCES localidade(id_local);
 
 -- 2.3  Tabela para a viagem(identificador da
 --      viagem, linha, datas e horários e o
 --      veículo utilizado)
-DROP TABLE viagem CASCADE CONSTRAINTS;
-CREATE TABLE viagem (
-    cod_viagem PRIMARY KEY,
-    cod_linha_viagem INTEGER NOT NULL,
-    num_veiculo INTEGER NOT NULL,
-    dt_programada TIMESTAMP NOT NULL,
-    dt_inicio_viagem TIMESTAMP NOT NULL,
-    dt_fim_viagem TIMESTAMP NOT,
-    FOREIGN KEY (cod_linha_viagem)
-        REFERENCES viagem(cod_linha_viagem)
-        ON DELETE CASCADE
-);
 
--- Popula a tabela de locais
-DECLARE
-    arv_data UTL_FILE.FILE_TYPE;
-    arv_linha VARCHAR2(32767);
-    cont_cidade NUMBER;
-    BEGIN
-        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
+DELETE FROM base WHERE codigo_viagem = 'codigo_viagem';
 
-    LOOP
-        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
-
-        SELECT COUNT(cod_local)
-            INTO cont_cidade
-            FROM local
-            WHERE cidade=UPPER(REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10));
-
-        IF cont_cidade = 0 THEN
-            INSERT INTO local (
-                cidade,
-                uf,
-                latitude,
-                longitude
-            ) VALUES (
-                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10),
-                (SELECT cod_uf
-                    FROM uf
-                    WHERE sigla=UPPER(
-                        REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 11)
-                    )
-                ),
-                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 12),
-                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 13),
-            );
-        END IF;
-
-    END LOOP;
-
-    UTL_FILE.FCLOSE(arv_data);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-        null;
-    END;
-
--- Popula a tabela de linhas de viagem
-DECLARE
-    arv_data UTL_FILE.FILE_TYPE;
-    arv_linha VARCHAR2(32767);
-    BEGIN
-        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
-
-    LOOP
-        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
-
-        INSERT INTO linha_viagem (
-            empresa,
-            cod_local_origem,
-            cod_local_destino,
+-- Tabela viagem
+CREATE TABLE viagem AS
+    SELECT
+        DISTINCT
+            codigo_viagem AS id_viagem,
+            num_linha AS numero_linha,
+            tipo_viagem,
             sentido_linha,
-            tipo_viagem
-        ) VALUES (
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 2),
-            (SELECT cod_local
-                FROM local
-                WHERE cidade=UPPER(
-                    REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 8)
-                )
-            ),
-            (SELECT cod_local
-                FROM local
-                WHERE cidade=UPPER(
-                    REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10)
-                )
-            ),
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 6),
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 5)
-        );
-
-    END LOOP;
-
-    UTL_FILE.FCLOSE(arv_data);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-        null;
-    END;
-
--- Popula a tabela de viagem
-DECLARE
-    arv_data UTL_FILE.FILE_TYPE;
-    arv_linha VARCHAR2(32767);
-    cod_fk_linha_viagem linha_viagem.cod_linha_viagem%TYPE;
-    cod_fk_origem local.cod_local%TYPE;
-    cod_fk_destino local.cod_local%TYPE;
-    BEGIN
-        arv_data := UTL_FILE.FOPEN('EXT_DIR', 'road-transport-brazil.csv', 'R', 32767);
-
-    LOOP
-        UTL_FILE.GET_LINE(arv_data, arv_linha, 32767);
-
-        SELECT cod_local
-            INTO cod_fk_origem
-            FROM local
-            WHERE cidade=UPPER(
-                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 8)
-            );
-
-        SELECT cod_local
-            INTO cod_fk_destino
-            FROM local
-            WHERE cidade=UPPER(
-                REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 10)
-            );
-
-        SELECT cod_linha_viagem
-            INTO cod_fk_linha_viagem
-            FROM linha_viagem
-            WHERE cod_local_origem=cod_fk_origem
-                AND cod_local_destino=cod_fk_destino;
-
-        INSERT INTO viagem (
-            cod_linha_viagem,
-            num_veiculo,
-            dt_programada,
-            dt_inicio_viagem,
-            dt_fim_viagem
-        ) VALUES (
-            cod_fk_linha_viagem,
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 4),
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 15),
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 16),
-            REGEXP_SUBSTR(arv_linha, '[^,]+', 1, 17)
-        );
-
-    END LOOP;
-
-    UTL_FILE.FCLOSE(arv_data);
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-        null;
-    END;
+            data_viagem_programada AS dthora_programada,
+            data_inicio_viagem AS dthora_inicio,
+            data_fim_viagem AS dthora_termino
+        FROM base
+        ORDER BY
+            data_viagem_programada,
+            data_inicio_viagem;
 
 -- 2.4  Converta todos os identificadores
 --      hexadecimais em decimais
+
+-- Empresa
+SELECT
+    empresa,
+    TO_NUMBER(empresa,'XXXXXXXXXX')
+    FROM linha_viagem;
+
+-- Linha de viagem
+ALTER TABLE linha_viagem
+    ADD id_empresa INTEGER;
+
+UPDATE linha_viagem SET
+    id_empresa=TO_NUMBER(empresa,'XXXXXXXXXX');
+
+-- Número da linha
+SELECT
+    numero_linha,
+    TO_NUMBER(numero_linha,'XXXXXXXXXX')
+    FROM linha_viagem;
+
+ALTER TABLE linha_viagem
+    ADD id_linha INTEGER;
+
+UPDATE linha_viagem SET
+    id_linha=TO_NUMBER(numero_linha,'XXXXXXXXXX');
+
+-- Número de linha
+SELECT
+    numero_linha,
+    TO_NUMBER(numero_linha,'XXXXXXXXXX')
+    FROM viagem;
+
+-- Viagem
+ALTER TABLE viagem
+    ADD id_linha INTEGER;
+
+UPDATE viagem SET
+    id_linha=TO_NUMBER(numero_linha,'XXXXXXXXXX');
+
+-- Criar relacionamento Viagem e Linha
+ALTER TABLE linha_viagem
+    ADD CONSTRAINT pk_linha
+        PRIMARY KEY (id_linha);
+
+ALTER TABLE viagem
+    ADD CONSTRAINT fk_linha
+        FOREIGN KEY(id_linha)
+            REFERENCES linha_viagem(id_linha)
+            ON DELETE CASCADE;
+
+-- Exclusão dos hexadecimais
+ALTER TABLE viagem
+    DROP COLUMN numero_linha;
+
+ALTER TABLE linha_viagem
+    DROP COLUMN numero_linha;
+
+-- ID Viagem
+ALTER TABLE viagem
+    ADD num_viagem INTEGER;
+
+UPDATE viagem SET
+    num_viagem=TO_NUMBER(id_viagem,'XXXXXXXXXX');
+
+ALTER TABLE viagem
+    ADD CONSTRAINT pk_viagem
+        PRIMARY KEY(num_viagem);
+
+ALTER TABLE viagem
+    DROP COLUMN id_viagem;

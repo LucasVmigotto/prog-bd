@@ -51,20 +51,7 @@ TRUNCATE TABLE base;
 -- 2.1  Tabela para os locais(cidade +
 --      UF + latitude e longitude)
 
-SELECT
-    DISTINCT
-        origem_cidade,
-        origem_uf
-    FROM base
-    ORDER BY 1;
-SELECT
-    DISTINCT
-        destino_cidade,
-        destino_uf
-    FROM base
-    ORDER BY 1;
-
--- Tabela pela origem
+-- Tabela origem
 CREATE TABLE origem AS
     SELECT
         DISTINCT
@@ -95,16 +82,20 @@ CREATE TABLE localidade AS
             FROM destino;
 
 -- Ajustes
-DELETE FROM localidade WHERE cidade IN ( 'destino','origem');
+DELETE FROM localidade WHERE cidade IN ('destino','origem');
 
 -- Definindo primary key
 ALTER TABLE localidade
     ADD id_local SMALLINT;
+
 CREATE SEQUENCE seq_local START WITH 1;
+
 UPDATE localidade SET
     id_local = seq_local.nextval;
+
 ALTER TABLE localidade
-    ADD CONSTRAINT pk_local PRIMARY KEY(id_local);
+    ADD CONSTRAINT pk_local
+        PRIMARY KEY(id_local);
 
 -- 2.2  Tabela para linha de viagem e
 --      seus respectivos dados (
@@ -258,3 +249,63 @@ ALTER TABLE viagem
 
 ALTER TABLE viagem
     DROP COLUMN id_viagem;
+
+/* ####################### */
+/* Atividade P2 - Parte #2 */
+/* ####################### */
+-- 3    Importe os dados do
+--      arquivo brasil.csv
+--      (municípios com latitude
+--      e longitude) para o
+--      Oracle. A partir deste
+--      arquivo atualize os
+--      dados de latitude e
+--      longitude de cada
+--      localidade criadaem
+--      2.1 acima
+
+
+-- 4    Utilizando a linguagem
+--      SQL responda à seguintes
+--      consultas:
+
+-- 4.1  Mostre um ranking das
+--      cidadesdestino das viagens:
+--      Cidade Destino – Qtde
+--      Viagens - Posição
+
+
+-- 4.2  Refaça a consulta 4.1
+--      acima incluindo o mês-ano
+--      e limitando aos 5 primeiros
+--      destinos em cada mês
+
+
+-- 4.3  Monte um ranking da quantidade
+--      de viagens por cidade e UF de
+--      origem acada mês-ano, mostrando
+--      o total por mês, cidade e UF
+--      (ou seja, de onde maissaem viagens)
+
+
+-- 4.4  Mostre umranking das viagens
+--      com média de duração mais
+--      demoradas: Origem-destino -
+--      Duração Média em horas,
+--      exibindo também a próxima
+--      e a anterior
+
+
+-- 4.5  Refaça a consulta 4.4 acima
+--      mostrando agora por UF e
+--      somente para viagensdentrodo
+--      mesmo estado (estaduais).
+
+
+-- 5    Utilizando a linguagem PL/SQL
+--      transforme a consulta 4.2
+--      acima em uma procedure que
+--      permita entrar o período
+--      (data inicial e final) e o
+--      número de posições no ranking
+--      de cada mês

@@ -72,13 +72,13 @@ CREATE TABLE destino AS
 -- Tabela localidade
 CREATE TABLE localidade AS
     SELECT
-        origem_cidade AS Cidade,
-        origem_uf AS UF
+        origem_cidade AS cidade,
+        origem_uf AS uf
         FROM origem
         UNION
             SELECT
-                destino_cidade AS Cidade,
-                destino_uf AS UF
+                destino_cidade AS cidade,
+                destino_uf AS uf
             FROM destino;
 
 -- Ajustes
@@ -261,9 +261,46 @@ ALTER TABLE viagem
 --      arquivo atualize os
 --      dados de latitude e
 --      longitude de cada
---      localidade criadaem
+--      localidade criada em
 --      2.1 acima
 
+-- Tabela brasil_csv
+DROP TABLE brasil_csv CASCADE CONSTRAINTS;
+CREATE TABLE brasil_csv (
+    ibge VARCHAR2(30),
+    municipio VARCHAR2(30),
+    latitude VARCHAR2(30),
+    longitude VARCHAR2(30),
+    cod_estado VARCHAR2(30),
+    estado VARCHAR2(30),
+    uf VARCHAR2(30),
+    regiao VARCHAR2(30),
+    capital VARCHAR2(30)
+);
+TRUNCATE TABLE brasil_csv;
+
+-- Localidade
+ALTER TABLE localidade
+    ADD (
+        latitude NUMBER(7, 5),
+        longitude NUMBER(7, 5)
+    );
+
+UPDATE localidade l SET
+    latitude=TO_NUMBER(
+        SELECT bc.latitude
+            FROM brasil_csv bc
+            WHERE l.cidade=UPPER(bc.municipio)
+                AND l.uf=UPPER(bc.uf)
+    );
+
+UPDATE localidade l SET
+    longitude=TO_NUMBER(
+        SELECT bc.longitude
+            FROM brasil_csv bc
+            WHERE l.cidade=UPPER(bc.municipio)
+                AND l.uf=UPPER(bc.uf)
+    );
 
 -- 4    Utilizando a linguagem
 --      SQL responda à seguintes

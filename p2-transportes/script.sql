@@ -42,7 +42,7 @@ CREATE TABLE base (
     data_inicio_viagem VARCHAR2(30),
     data_fim_viagem VARCHAR2(30)
 );
-TRUNCATE TABLE base;
+-- TRUNCATE TABLE base;
 
 -- 2    Monte o script completo
 --      para tratar os dados com
@@ -268,7 +268,7 @@ ALTER TABLE viagem
 DROP TABLE brasil_csv CASCADE CONSTRAINTS;
 CREATE TABLE brasil_csv (
     ibge VARCHAR2(30),
-    municipio VARCHAR2(30),
+    municipio VARCHAR2(50),
     latitude VARCHAR2(30),
     longitude VARCHAR2(30),
     cod_estado VARCHAR2(30),
@@ -277,7 +277,7 @@ CREATE TABLE brasil_csv (
     regiao VARCHAR2(30),
     capital VARCHAR2(30)
 );
-TRUNCATE TABLE brasil_csv;
+-- TRUNCATE TABLE brasil_csv;
 
 -- Localidade
 ALTER TABLE localidade
@@ -287,7 +287,7 @@ ALTER TABLE localidade
     );
 
 UPDATE localidade l SET
-    latitude=TO_NUMBER(
+    latitude=(
         SELECT bc.latitude
             FROM brasil_csv bc
             WHERE l.cidade=UPPER(bc.municipio)
@@ -295,7 +295,7 @@ UPDATE localidade l SET
     );
 
 UPDATE localidade l SET
-    longitude=TO_NUMBER(
+    longitude=(
         SELECT bc.longitude
             FROM brasil_csv bc
             WHERE l.cidade=UPPER(bc.municipio)
@@ -307,9 +307,9 @@ UPDATE localidade l SET
 --      consultas:
 
 -- 4.1  Mostre um ranking das
---      cidadesdestino das viagens:
---      Cidade Destino – Qtde
---      Viagens - Posição
+--      cidades destino das
+--      viagens: Cidade Destino
+--      – Qtde Viagens - Posição
 
 
 -- 4.2  Refaça a consulta 4.1
@@ -322,10 +322,11 @@ UPDATE localidade l SET
 --      de viagens por cidade e UF de
 --      origem acada mês-ano, mostrando
 --      o total por mês, cidade e UF
---      (ou seja, de onde maissaem viagens)
+--      (ou seja, de onde mais
+--      saem viagens)
 
 
--- 4.4  Mostre umranking das viagens
+-- 4.4  Mostre um ranking das viagens
 --      com média de duração mais
 --      demoradas: Origem-destino -
 --      Duração Média em horas,

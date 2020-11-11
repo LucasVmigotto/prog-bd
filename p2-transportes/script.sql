@@ -1,3 +1,11 @@
+DROP SEQUENCE seq_local;
+DROP TABLE base CASCADE CONSTRAINTS;
+DROP TABLE origem CASCADE CONSTRAINTS;
+DROP TABLE destino CASCADE CONSTRAINTS;
+DROP TABLE localidade CASCADE CONSTRAINTS;
+DROP TABLE linha_viagem CASCADE CONSTRAINTS;
+DROP TABLE viagem CASCADE CONSTRAINTS;
+DROP TABLE brasil_csv CASCADE CONSTRAINTS;
 /* ######################################################## */
 /*  FATEC Ipiranga - Análise e Desenvolvimento de Sistemas  */
 /*  Programação para Banco de Dados - Projeto P2            */
@@ -27,15 +35,15 @@ CREATE TABLE base (
     codigo_viagem VARCHAR2(30),
     empresa VARCHAR2(30),
     num_linha VARCHAR2(30),
-    onibus	 VARCHAR2(30),
+    onibus VARCHAR2(30),
     tipo_viagem VARCHAR2(30),
     sentido_linha VARCHAR2(30),
     in_transbordo VARCHAR2(30),
     origem_cidade VARCHAR2(50),
-    origem_uf	VARCHAR2(30),
+    origem_uf VARCHAR2(30),
     destino_cidade VARCHAR2(50),
-    destino_uf	 VARCHAR2(30),
-    latitude	VARCHAR2(30),
+    destino_uf VARCHAR2(30),
+    latitude VARCHAR2(30),
     longitude VARCHAR2(30),
     pdop VARCHAR2(30),
     data_viagem_programada VARCHAR2(30),
@@ -116,6 +124,7 @@ CREATE TABLE linha_viagem AS
             destino_uf
         FROM base
         ORDER BY empresa;
+
 DELETE FROM linha_viagem
     WHERE empresa = 'empresa';
 
@@ -180,12 +189,6 @@ CREATE TABLE viagem AS
 -- 2.4  Converta todos os identificadores
 --      hexadecimais em decimais
 
--- Empresa
-SELECT
-    empresa,
-    TO_NUMBER(empresa,'XXXXXXXXXX')
-    FROM linha_viagem;
-
 -- Linha de viagem
 ALTER TABLE linha_viagem
     ADD id_empresa INTEGER;
@@ -193,23 +196,11 @@ ALTER TABLE linha_viagem
 UPDATE linha_viagem SET
     id_empresa=TO_NUMBER(empresa,'XXXXXXXXXX');
 
--- Número da linha
-SELECT
-    numero_linha,
-    TO_NUMBER(numero_linha,'XXXXXXXXXX')
-    FROM linha_viagem;
-
 ALTER TABLE linha_viagem
     ADD id_linha INTEGER;
 
 UPDATE linha_viagem SET
     id_linha=TO_NUMBER(numero_linha,'XXXXXXXXXX');
-
--- Número de linha
-SELECT
-    numero_linha,
-    TO_NUMBER(numero_linha,'XXXXXXXXXX')
-    FROM viagem;
 
 -- Viagem
 ALTER TABLE viagem
@@ -282,8 +273,8 @@ CREATE TABLE brasil_csv (
 -- Localidade
 ALTER TABLE localidade
     ADD (
-        latitude NUMBER(7, 5),
-        longitude NUMBER(7, 5)
+        latitude VARCHAR2(30),
+        longitude VARCHAR2(30)
     );
 
 UPDATE localidade l SET
@@ -336,8 +327,8 @@ UPDATE localidade l SET
 
 -- 4.5  Refaça a consulta 4.4 acima
 --      mostrando agora por UF e
---      somente para viagensdentrodo
---      mesmo estado (estaduais).
+--      somente para viagens dentro
+--      do mesmo estado (estaduais).
 
 
 -- 5    Utilizando a linguagem PL/SQL

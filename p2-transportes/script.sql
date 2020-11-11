@@ -1,11 +1,3 @@
-DROP SEQUENCE seq_local;
-DROP TABLE base CASCADE CONSTRAINTS;
-DROP TABLE origem CASCADE CONSTRAINTS;
-DROP TABLE destino CASCADE CONSTRAINTS;
-DROP TABLE localidade CASCADE CONSTRAINTS;
-DROP TABLE linha_viagem CASCADE CONSTRAINTS;
-DROP TABLE viagem CASCADE CONSTRAINTS;
-DROP TABLE brasil_csv CASCADE CONSTRAINTS;
 /* ######################################################## */
 /*  FATEC Ipiranga - Análise e Desenvolvimento de Sistemas  */
 /*  Programação para Banco de Dados - Projeto P2            */
@@ -116,7 +108,7 @@ ALTER TABLE localidade
 CREATE TABLE linha_viagem AS
     SELECT
         DISTINCT
-            num_linha AS Numero_Linha,
+            num_linha AS numero_Linha,
             empresa,
             origem_cidade,
             origem_uf,
@@ -301,7 +293,14 @@ UPDATE localidade l SET
 --      cidades destino das
 --      viagens: Cidade Destino
 --      – Qtde Viagens - Posição
-
+SELECT
+    lv.destino_cidade,
+    COUNT(lv.destino_cidade) AS qtde_viagens
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON v.id_linha=lv.id_linha
+    GROUP BY lv.destino_cidade
+    ORDER BY qtde_viagens DESC;
 
 -- 4.2  Refaça a consulta 4.1
 --      acima incluindo o mês-ano

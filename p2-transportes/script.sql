@@ -293,14 +293,19 @@ UPDATE localidade l SET
 --      cidades destino das
 --      viagens: Cidade Destino
 --      – Qtde Viagens - Posição
-SELECT
-    lv.destino_cidade,
-    COUNT(lv.destino_cidade) AS qtde_viagens
-    FROM viagem v
-    JOIN linha_viagem lv
-        ON v.id_linha=lv.id_linha
-    GROUP BY lv.destino_cidade
-    ORDER BY qtde_viagens DESC;
+WITH ranking AS (
+    SELECT
+        lv.destino_cidade,
+        COUNT(lv.destino_cidade) AS qtde_viagens
+        FROM viagem v
+        JOIN linha_viagem lv
+            ON v.id_linha=lv.id_linha
+        GROUP BY lv.destino_cidade
+) SELECT
+    RANK() OVER(ORDER BY qtde_viagens DESC) AS posicao,
+    destino_cidade,
+    qtde_viagens
+    FROM ranking;
 
 -- 4.2  Refaça a consulta 4.1
 --      acima incluindo o mês-ano

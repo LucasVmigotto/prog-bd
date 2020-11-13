@@ -668,3 +668,45 @@ CREATE OR REPLACE PROCEDURE ranking_viagens (
             DBMS_OUTPUT.PUT_LINE (RPAD('-', 100, '-'));
         END LOOP;
     END;
+
+/* ####################### */
+/* Atividade P2 - Parte #3 */
+/* ####################### */
+-- 6    Altere a estrutura de
+--      linha da viagem para
+--      incluir a distância
+--      (em km) entre a cidade
+--      de origem e a cidade
+--      de destino, utilizando
+--      a latitude e longitude
+--      atualizadas no item 3
+--      acima. Utilize alguma
+--      função pronta em PL/SQL
+--      para o cálculo da distância
+--      (pesquisar na WEB)
+
+
+-- 7    Elabore uma procedure
+--      com SQL dinâmica que
+--      mostre um ranking das
+--      linhas de viagens com
+--      velocidade máxima,
+--      mínima ou média para uma
+--      determinada cidade de
+--      origem, passando como
+--      parâmetro parte do nome
+--      dessacidade, a função
+--      que será utilizada:
+--      MIN, MAX ou AVG, o
+--      número de ranqueadose
+--      se vai usar RANK() ou
+--      DENSE-RANK(). Por exemplo:
+--      ranking das linhas com
+--      as 10 maiores velocidades
+--      tendo como origem São Paulo
+--      e o ranking contínuo.
+--      Mostrar o número da linha,
+--      cidade destino, velocidade(
+--      que poderão ser as maiores,
+--      menores ou a média), posição
+--      e ordem no ranking.

@@ -133,7 +133,7 @@ UPDATE linha_viagem lv SET
         SELECT l.id_local
             FROM localidade l
             WHERE TRIM(UPPER(lv.origem_cidade))=TRIM(l.cidade)
-                AND TRIM(UPPER(lv.origem_uf))=TRIM(l.UF)
+                AND TRIM(UPPER(lv.origem_uf))=TRIM(l.uf)
     );
 
 -- destino
@@ -142,7 +142,7 @@ UPDATE linha_viagem lv SET
         SELECT l.id_local
             FROM localidade l
                 WHERE TRIM(UPPER(lv.destino_cidade))=TRIM(l.cidade)
-                    AND TRIM(UPPER(lv.destino_uf))=TRIM(l.UF)
+                    AND TRIM(UPPER(lv.destino_uf))=TRIM(l.uf)
     );
 
 -- Definindo foreign keys
@@ -236,6 +236,114 @@ ALTER TABLE viagem
 /* ####################### */
 /* Atividade P2 - Parte #2 */
 /* ####################### */
+-- Definição de função converte_datahora
+CREATE OR REPLACE FUNCTION converte_datahora (
+    vdata IN VARCHAR2
+) RETURN TIMESTAMP IS vdthora TIMESTAMP;
+    vdia CHAR(2) := SUBSTR(vdata,9,2);
+    vmes CHAR(2) := SUBSTR(vdata,6,2);
+    vano CHAR(4) := SUBSTR(vdata,1,4);
+    vhora CHAR(2) := SUBSTR(vdata,12,2);
+    vmin CHAR(2) := SUBSTR(vdata,15,2);
+    vseg CHAR(2) := SUBSTR(vdata,18,2);
+    BEGIN
+        SELECT
+            TO_TIMESTAMP(
+                vdia ||
+                '-' ||
+                vmes ||
+                '-' ||
+                vano ||
+                ' ' ||
+                vhora ||
+                ':' ||
+                vmin ||
+                ':' ||
+                vseg,
+                'DD-MM-YYYY HH24:MI:SS'
+            )
+            INTO vdthora
+            FROM dual;
+        RETURN vdthora;
+    END;
+
+-- Ajuste tabela Viagem
+ALTER TABLE viagem
+    ADD (
+        dt_hora_programada TIMESTAMP,
+        dt_hora_inicio TIMESTAMP,
+        dt_hora_termino TIMESTAMP
+    );
+
+-- Criação índices
+CREATE INDEX idx_programada
+    ON viagem(dthora_programada);
+CREATE INDEX idx_inicio
+    ON viagem(dthora_inicio);
+CREATE INDEX idx_termino
+    ON viagem(dthora_termino);
+
+-- Atualização tabela Viagem
+UPDATE viagem SET
+    dt_hora_programada = converte_datahora(dthora_programada);
+UPDATE viagem SET
+    dt_hora_inicio = converte_datahora(dthora_inicio);
+UPDATE viagem SET
+    dt_hora_termino = converte_datahora(dthora_termino);
+
+-- Definição de função duracao_minutos
+CREATE OR REPLACE FUNCTION duracao_minutos (
+    vtime_ini IN TIMESTAMP,
+    vtime_fim IN TIMESTAMP
+) RETURN INTEGER IS vduracao INTEGER;
+    vdias SMALLINT := 0;
+    vhoras SMALLINT := 0;
+    vminutos SMALLINT := 0;
+    BEGIN
+        SELECT
+            TO_NUMBER(
+                EXTRACT(DAY FROM (vtime_fim - vtime_ini))
+            ),
+            TO_NUMBER(
+                EXTRACT(HOUR FROM (vtime_fim - vtime_ini))
+            ),
+            TO_NUMBER(
+                EXTRACT(MINUTE FROM (vtime_fim - vtime_ini))
+            )
+            INTO
+                vdias,
+                vhoras,
+                vminutos
+            FROM dual;
+        vduracao := vdias * 24 * 60 + vhoras * 60 + vminutos;
+        IF vduracao < 0 THEN
+            vduracao := 12 * 60 + vduracao;
+        END IF;
+        RETURN vduracao;
+    END;
+
+-- Alteração tabela Viagem
+ALTER TABLE viagem
+    ADD duracao_min INTEGER;
+
+-- Atualização tabela Viagem
+UPDATE viagem SET
+    duracao_min = duracao_minutos(dt_hora_inicio, dt_hora_termino);
+
+-- Definição de função mostra_horas
+CREATE OR REPLACE FUNCTION mostra_horas (
+    vmin IN INTEGER
+) RETURN CHAR IS vhoras CHAR(15);
+    BEGIN
+        SELECT
+            TO_CHAR(TRUNC(vmin/60), '00') ||
+                'h' ||
+                TO_CHAR(MOD(vmin,60),'00') ||
+                'min'
+            INTO vhoras FROM dual;
+        RETURN vhoras;
+    END;
+
 -- 3    Importe os dados do
 --      arquivo brasil.csv
 --      (municípios com latitude
@@ -246,21 +354,19 @@ ALTER TABLE viagem
 --      longitude de cada
 --      localidade criada em
 --      2.1 acima
-
--- Tabela brasil_csv
-DROP TABLE brasil_csv CASCADE CONSTRAINTS;
-CREATE TABLE brasil_csv (
-    ibge VARCHAR2(30),
-    municipio VARCHAR2(50),
-    latitude VARCHAR2(30),
-    longitude VARCHAR2(30),
-    cod_estado VARCHAR2(30),
-    estado VARCHAR2(30),
-    uf VARCHAR2(30),
-    regiao VARCHAR2(30),
-    capital VARCHAR2(30)
+DROP TABLE consolidado CASCADE CONSTRAINTS;
+CREATE TABLE consolidado (
+  ibge INTEGER,
+  municipio VARCHAR2(40),
+  latitude VARCHAR2(10),
+  longitude VARCHAR2(10),
+  cod_estado INTEGER,
+  estado VARCHAR2(40),
+  uf VARCHAR2(40),
+  regiao VARCHAR2(40),
+  capital INTEGER
 );
--- TRUNCATE TABLE brasil_csv;
+-- TRUNCATE TABLE consolidado;
 
 -- Localidade
 ALTER TABLE localidade
@@ -270,19 +376,21 @@ ALTER TABLE localidade
     );
 
 UPDATE localidade l SET
-    latitude=(
-        SELECT bc.latitude
-            FROM brasil_csv bc
-            WHERE l.cidade=UPPER(bc.municipio)
-                AND l.uf=UPPER(bc.uf)
+    l.latitude = (
+        SELECT
+            c.latitude
+            FROM consolidado c
+            WHERE TRIM(UPPER(c.municipio)) = TRIM(l.cidade)
+                AND TRIM(UPPER(c.uf)) = TRIM(l.uf)
     );
 
 UPDATE localidade l SET
-    longitude=(
-        SELECT bc.longitude
-            FROM brasil_csv bc
-            WHERE l.cidade=UPPER(bc.municipio)
-                AND l.uf=UPPER(bc.uf)
+    l.longitude = (
+        SELECT
+            c.longitude
+            FROM consolidado c
+            WHERE TRIM(UPPER(c.municipio)) = TRIM(l.cidade)
+                AND TRIM(UPPER(c.uf)) = TRIM(l.uf)
     );
 
 -- 4    Utilizando a linguagem
@@ -293,25 +401,47 @@ UPDATE localidade l SET
 --      cidades destino das
 --      viagens: Cidade Destino
 --      – Qtde Viagens - Posição
-WITH ranking AS (
-    SELECT
-        lv.destino_cidade,
-        COUNT(lv.destino_cidade) AS qtde_viagens
-        FROM viagem v
-        JOIN linha_viagem lv
-            ON v.id_linha=lv.id_linha
-        GROUP BY lv.destino_cidade
-) SELECT
-    RANK() OVER(ORDER BY qtde_viagens DESC) AS posicao,
-    destino_cidade,
-    qtde_viagens
-    FROM ranking;
+SELECT
+    ldest.cidade AS cidade_destino,
+    COUNT(v.num_viagem) AS qtde_viagens,
+    RANK() OVER (
+        ORDER BY COUNT(v.num_viagem) DESC
+    ) AS rkg
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    GROUP BY ldest.cidade;
 
 -- 4.2  Refaça a consulta 4.1
 --      acima incluindo o mês-ano
 --      e limitando aos 5 primeiros
 --      destinos em cada mês
-
+SELECT *
+    FROM (
+        SELECT
+            TO_CHAR(v.dt_hora_termino, 'MM-YYYY') AS mes_ano,
+            ldest.cidade AS cidade_destino,
+            COUNT(v.num_viagem) AS qtde_viagens,
+            DENSE_RANK() OVER (
+                PARTITION BY TO_CHAR(v.dt_hora_termino, 'MM-YYYY')
+                ORDER BY COUNT(v.num_viagem) DESC
+            ) AS rkg,
+            ROW_NUMBER() OVER (
+                PARTITION BY TO_CHAR(v.dt_hora_termino, 'MM-YYYY')
+                ORDER BY COUNT(v.num_viagem) DESC
+            ) AS ordem
+            FROM viagem v
+            JOIN linha_viagem lv
+                ON (v.id_linha = lv.id_linha)
+            JOIN localidade ldest
+                ON (lv.id_destino = ldest.id_local)
+            GROUP BY
+                TO_CHAR(v.dt_hora_termino, 'MM-YYYY'),
+                ldest.cidade
+    ) rkgmes
+    WHERE rkgmes.ordem <= 5;
 
 -- 4.3  Monte um ranking da quantidade
 --      de viagens por cidade e UF de
@@ -319,7 +449,24 @@ WITH ranking AS (
 --      o total por mês, cidade e UF
 --      (ou seja, de onde mais
 --      saem viagens)
-
+SELECT
+    lorig.uf AS uf_origem,
+    lorig.cidade AS cidade_origem,
+    TO_CHAR(v.dt_hora_inicio, 'MM-YYYY') AS mes_ano,
+    COUNT(v.num_viagem) AS qtde_viagens,
+    DENSE_RANK() OVER (
+        ORDER BY COUNT(v.num_viagem) DESC
+    ) AS rkg
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    GROUP BY ROLLUP(
+            lorig.uf,
+            lorig.cidade,
+            TO_CHAR(v.dt_hora_inicio, 'MM-YYYY')
+        );
 
 -- 4.4  Mostre um ranking das viagens
 --      com média de duração mais
@@ -327,13 +474,134 @@ WITH ranking AS (
 --      Duração Média em horas,
 --      exibindo também a próxima
 --      e a anterior
+SELECT
+    v.id_linha AS linha,
+    lorig.cidade ||
+        '-' ||
+        lorig.uf AS cidade_origem,
+    ldest.cidade ||
+        '-' ||
+        ldest.uf AS cidade_destino,
+    mostra_horas(
+        ROUND(AVG(v.duracao_min)/60,1)
+    ) AS Duracao_media,
+    LEAD (v.id_linha, 1, null)
+        OVER (
+            ORDER BY AVG(v.duracao_min) DESC
+        ) proximo,
+    LAG (v.id_linha, 1, null)
+        OVER (
+            ORDER BY AVG(v.duracao_min) DESC
+        ) anterior
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    GROUP BY
+        v.id_linha,
+        lorig.cidade ||
+            '-' ||
+            lorig.uf,
+        ldest.cidade ||
+            '-' ||
+            ldest.uf;
 
+SELECT
+    v.id_linha AS linha,
+    lorig.cidade AS origem,
+    ldest.cidade AS destino,
+    COUNT(*)
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    GROUP BY
+        v.id_linha,
+        lorig.cidade,
+        ldest.cidade
+    ORDER BY 4 DESC;
+
+SELECT
+    v.id_linha AS linha,
+    lorig.cidade AS origem,
+    ldest.cidade AS destino,
+    v.duracao_min,
+    v.dt_hora_inicio,
+    v.dt_hora_termino
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    WHERE lv.id_linha=1042736092
+    ORDER BY 4 DESC;
 
 -- 4.5  Refaça a consulta 4.4 acima
 --      mostrando agora por UF e
 --      somente para viagens dentro
 --      do mesmo estado (estaduais).
+SELECT
+    v.id_linha AS linha,
+    lorig.cidade ||
+        '-' ||
+        lorig.uf AS cidade_origem,
+    ldest.cidade ||
+        '-' ||
+        ldest.uf AS cidade_destino,
+    mostra_horas(
+        ROUND(AVG(v.duracao_min)/60,1)
+    ) AS duracao_media,
+    LEAD (v.id_linha, 1, null)
+        OVER (
+            ORDER BY  AVG(v.duracao_min) DESC
+        ) proximo,
+    LAG (v.id_linha, 1, null)
+        OVER (
+            ORDER BY AVG(v.duracao_min) DESC
+        ) anterior
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    WHERE lorig.uf = ldest.uf
+    GROUP BY
+        v.id_linha,
+        lorig.cidade ||
+            '-' ||
+            lorig.uf,
+        ldest.cidade ||
+            '-' ||
+            ldest.uf;
 
+SELECT
+    lorig.cidade ||
+        '-' ||
+        lorig.uf AS cidade_origem,
+    ldest.cidade ||
+        '-' ||
+        ldest.uf AS cidade_destino
+    FROM viagem v
+    JOIN linha_viagem lv
+        ON (v.id_linha = lv.id_linha)
+    JOIN localidade lorig
+        ON (lv.id_origem = lorig.id_local)
+    JOIN localidade ldest
+        ON (lv.id_destino = ldest.id_local)
+    WHERE lorig.uf=ldest.uf;
+
+SELECT * FROM linha_viagem;
+SELECT * FROM base WHERE origem_uf=destino_uf;
 
 -- 5    Utilizando a linguagem PL/SQL
 --      transforme a consulta 4.2
@@ -342,3 +610,61 @@ WITH ranking AS (
 --      (data inicial e final) e o
 --      número de posições no ranking
 --      de cada mês
+CREATE OR REPLACE PROCEDURE ranking_viagens (
+    vini IN DATE,
+    vfim IN DATE,
+    vrank IN SMALLINT
+) IS CURSOR rkg_viagem IS
+    SELECT *
+        FROM (
+            SELECT
+                TO_CHAR(v.dt_hora_termino, 'MM-YYYY')
+                    AS mes_ano,
+                ldest.cidade AS cidade_destino,
+                COUNT(v.num_viagem) AS qtde_viagens,
+                RANK() OVER (
+                    PARTITION BY TO_CHAR(v.dt_hora_termino, 'MM-YYYY')
+                    ORDER BY COUNT(v.num_viagem) DESC
+                ) AS rkg,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TO_CHAR(v.dt_hora_termino, 'MM-YYYY')
+                    ORDER BY COUNT(v.num_viagem) DESC
+                ) AS ordem
+                FROM viagem v
+                JOIN linha_viagem lv
+                    ON (v.id_linha = lv.id_linha)
+                JOIN localidade ldest
+                    ON (lv.id_destino = ldest.id_local)
+                WHERE v.dt_hora_termino
+                    BETWEEN vini AND vfim
+                GROUP BY
+                    TO_CHAR(v.dt_hora_termino, 'MM-YYYY'),
+                    ldest.cidade
+        ) rkgmes
+        WHERE rkgmes.ordem <= vrank;
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE (
+            'Periodo : ' ||
+            TO_CHAR(vini) ||
+            ' a ' ||
+            TO_CHAR(vfim)
+        );
+        DBMS_OUTPUT.PUT_LINE (
+            'Mes-Ano      Destino          Qtde Viagens   Posicao  Ordem'
+        );
+        DBMS_OUTPUT.PUT_LINE (RPAD('_', 100, '_'));
+        FOR k IN rkg_viagem LOOP
+            DBMS_OUTPUT.PUT_LINE (
+                RPAD(k.Mes_ano, 11, ' ') ||
+                '| ' ||
+                RPAD(k.cidade_destino, 22, ' ') ||
+                '|' ||
+                RPAD(TO_CHAR(k.qtde_viagens), 10, ' ') ||
+                '|' ||
+                RPAD(TO_CHAR(k.rkg),7, ' ') ||
+                '|' ||
+                TO_CHAR(k.ordem)
+            );
+            DBMS_OUTPUT.PUT_LINE (RPAD('-', 100, '-'));
+        END LOOP;
+    END;

@@ -685,6 +685,38 @@ CREATE OR REPLACE PROCEDURE ranking_viagens (
 --      para o cálculo da distância
 --      (pesquisar na WEB)
 
+-- Alteração viagem
+ALTER TABLE viagem
+    ADD distancia NUMBER(5,2);
+
+-- Definição de função calcular_distancia
+CREATE OR REPLACE FUNCTION calcular_distancia (
+    vl_lat1 IN NUMBER,
+    lv_lon1 IN NUMBER,
+    lv_lat2 IN NUMBER,
+    vl_lon2 IN NUMBER,
+    lv_radius IN NUMBER DEFAULT 3963
+) RETURN NUMBER IS
+    DegToRad NUMBER := 57.29577951;
+    ReturnValue NUMBER;
+    ACOS_Param NUMBER;
+    BEGIN
+        ACOS_Param := (sin(NVL(vl_lat1, 0) / DegToRad) * SIN(NVL(lv_lat2, 0) / DegToRad)) +
+            (COS(NVL(vl_lat1, 0) / DegToRad) * COS(NVL(lv_lat2, 0) / DegToRad) *
+            COS(NVL(vl_lon2, 0) / DegToRad - NVL(lv_lon1, 0) / DegToRad));
+
+        IF ACOS_Param > 1 THEN
+            ACOS_Param := 1;
+        END IF;
+
+        IF ACOS_Param < -1 THEN
+            ACOS_Param := -1;
+        END IF;
+
+        ReturnValue := NVL(lv_radius, 0) * ACOS(ACOS_Param);
+
+        RETURN ReturnValue;
+    END;
 
 -- 7    Elabore uma procedure
 --      com SQL dinâmica que

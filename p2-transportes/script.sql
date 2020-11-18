@@ -687,23 +687,23 @@ CREATE OR REPLACE PROCEDURE ranking_viagens (
 
 -- Alteração viagem
 ALTER TABLE viagem
-    ADD distancia NUMBER(5,2);
+    ADD distancia NUMBER;
 
 -- Definição de função calcular_distancia
 CREATE OR REPLACE FUNCTION calcular_distancia (
     vl_lat1 IN NUMBER,
-    lv_lon1 IN NUMBER,
-    lv_lat2 IN NUMBER,
+    vl_lon1 IN NUMBER,
+    vl_lat2 IN NUMBER,
     vl_lon2 IN NUMBER,
-    lv_radius IN NUMBER DEFAULT 3963
+    vl_radius IN NUMBER DEFAULT 3963
 ) RETURN NUMBER IS
     DegToRad NUMBER := 57.29577951;
     ReturnValue NUMBER;
     ACOS_Param NUMBER;
     BEGIN
-        ACOS_Param := (sin(NVL(vl_lat1, 0) / DegToRad) * SIN(NVL(lv_lat2, 0) / DegToRad)) +
-            (COS(NVL(vl_lat1, 0) / DegToRad) * COS(NVL(lv_lat2, 0) / DegToRad) *
-            COS(NVL(vl_lon2, 0) / DegToRad - NVL(lv_lon1, 0) / DegToRad));
+        ACOS_Param := (sin(NVL(vl_lat1, 0) / DegToRad) * SIN(NVL(vl_lat2, 0) / DegToRad)) +
+            (COS(NVL(vl_lat1, 0) / DegToRad) * COS(NVL(vl_lat2, 0) / DegToRad) *
+            COS(NVL(vl_lon2, 0) / DegToRad - NVL(vl_lon1, 0) / DegToRad));
 
         IF ACOS_Param > 1 THEN
             ACOS_Param := 1;
@@ -713,10 +713,39 @@ CREATE OR REPLACE FUNCTION calcular_distancia (
             ACOS_Param := -1;
         END IF;
 
-        ReturnValue := NVL(lv_radius, 0) * ACOS(ACOS_Param);
+        ReturnValue := NVL(vl_radius, 0) * ACOS(ACOS_Param);
 
         RETURN ReturnValue;
     END;
+
+DECLARE
+    CURSOR c_viagem IS
+        SELECT
+            v.num_viagem AS id_viagem,
+            l_origem.latitude AS origem_latitude,
+            l_origem.longitude AS origem_longitude,
+            l_destino.latitude AS destino_latitude,
+            l_destino.longitude AS destino_longitude
+            FROM viagem v
+            JOIN linha_viagem lv
+                ON (v.id_linha = lv.id_linha)
+            JOIN localidade l_origem
+                ON (lv.id_origem = l_origem.id_local)
+            JOIN localidade l_destino
+                ON (lv.id_destino = l_destino.id_local);
+BEGIN
+    FOR el_viagem IN c_viagem
+    LOOP
+        UPDATE viagem SET
+            distancia=calcular_distancia(
+                TO_NUMBER(el_viagem.origem_latitude),
+                TO_NUMBER(el_viagem.origem_longitude),
+                TO_NUMBER(el_viagem.destino_latitude),
+                TO_NUMBER(el_viagem.destino_longitude)
+            )
+            WHERE num_viagem = el_viagem.id_viagem;
+    END LOOP;
+END;
 
 -- 7    Elabore uma procedure
 --      com SQL dinâmica que

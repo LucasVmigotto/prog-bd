@@ -685,65 +685,278 @@ CREATE OR REPLACE PROCEDURE ranking_viagens (
 --      para o cálculo da distância
 --      (pesquisar na WEB)
 
--- Alteração viagem
-ALTER TABLE viagem
-    ADD distancia NUMBER;
+-- Alteração tabela localidade
+ALTER TABLE localidade
+    ADD (
+        nlongitude NUMBER(8,5),
+        nlatitude NUMBER(8,5)
+    );
 
--- Definição de função calcular_distancia
-CREATE OR REPLACE FUNCTION calcular_distancia (
-    vl_lat1 IN NUMBER,
-    vl_lon1 IN NUMBER,
-    vl_lat2 IN NUMBER,
-    vl_lon2 IN NUMBER,
-    vl_radius IN NUMBER DEFAULT 3963
-) RETURN NUMBER IS
-    DegToRad NUMBER := 57.29577951;
-    ReturnValue NUMBER;
-    ACOS_Param NUMBER;
+-- Atualização localidade (longitude)
+UPDATE localidade SET
+    longitude = TRIM(longitude) || '000'
+    WHERE LENGTH(TRIM(longitude)) = 5;
+
+-- Atualização localidade (latitude)
+UPDATE localidade SET
+    latitude = TRIM(latitude) || '0'
+    WHERE LENGTH(TRIM(latitude)) = 7;
+
+-- Definição de procedure converte_longitude
+CREATE OR REPLACE PROCEDURE converte_longitude(
+    vin IN INTEGER
+) IS
+    vlinha ROWID;
+    vinteiro INTEGER := 0;
+    vdecimal INTEGER := 0;
+    vtamint SMALLINT := 0;
+    vtamdec SMALLINT := 0;
+    vlongitude NUMBER(8,5);
+    vsinal SMALLINT := 0;
+    CURSOR longlat IS
+        SELECT
+            lc.*,
+            rowid AS linha
+            FROM localidade lc
+            WHERE longitude IS NOT NULL;
     BEGIN
-        ACOS_Param := (sin(NVL(vl_lat1, 0) / DegToRad) * SIN(NVL(vl_lat2, 0) / DegToRad)) +
-            (COS(NVL(vl_lat1, 0) / DegToRad) * COS(NVL(vl_lat2, 0) / DegToRad) *
-            COS(NVL(vl_lon2, 0) / DegToRad - NVL(vl_lon1, 0) / DegToRad));
-
-        IF ACOS_Param > 1 THEN
-            ACOS_Param := 1;
-        END IF;
-
-        IF ACOS_Param < -1 THEN
-            ACOS_Param := -1;
-        END IF;
-
-        ReturnValue := NVL(vl_radius, 0) * ACOS(ACOS_Param);
-
-        RETURN ReturnValue;
+        FOR j IN longlat LOOP
+            vsinal := -1;
+            vtamint := LENGTH(
+                SUBSTR (
+                    j.longitude, 1,
+                    INSTR (j.longitude, '.') - 1
+                )
+            );
+            vtamdec := LENGTH(
+                SUBSTR (
+                    j.longitude,
+                    INSTR(j.longitude, '.') + 1,
+                    LENGTH(j.longitude)
+                )
+            );
+            vinteiro := TO_NUMBER(
+                SUBSTR (
+                    j.longitude, 1,
+                    INSTR(j.longitude, '.') - 1
+                )
+            );
+            vdecimal := TO_NUMBER(
+                SUBSTR(
+                    j.longitude,
+                    INSTR(j.longitude, '.') + 1,
+                    LENGTH(j.longitude)
+                )
+            );
+            IF vinteiro < 0 THEN
+                vsinal := -1;
+            END IF;
+            IF vtamint = 3 THEN
+                vlongitude := vsinal * vinteiro + vdecimal / 10000;
+            ELSIF vtamint = 2 THEN
+                vlongitude := vsinal * vinteiro + vdecimal / 100000;
+            END IF;
+            vlongitude := vlongitude * vsinal;
+            DBMS_OUTPUT.PUT_LINE(
+                'Longitude:' ||
+                j.longitude ||
+                '->' ||
+                TO_CHAR(vlongitude)
+            );
+            vinteiro := 0;
+            vdecimal := 0;
+            UPDATE localidade lc SET
+                lc.nlongitude = vlongitude
+                WHERE lc.rowid = j.linha;
+        END LOOP;
     END;
 
-DECLARE
-    CURSOR c_viagem IS
+-- Execução de procedure converte_longitude
+BEGIN
+    converte_longitude(1);
+END;
+
+-- Definição de procedure converte_latitude
+CREATE OR REPLACE PROCEDURE converte_latitude (
+    vin IN INTEGER
+) IS
+    vinteiro INTEGER := 0;
+    vdecimal INTEGER := 0;
+    vtamint SMALLINT := 0;
+    vtamdec SMALLINT := 0;
+    vlatitude NUMBER(8,5);
+    vsinal SMALLINT := 0;
+    CURSOR clat IS
         SELECT
-            v.num_viagem AS id_viagem,
-            l_origem.latitude AS origem_latitude,
-            l_origem.longitude AS origem_longitude,
-            l_destino.latitude AS destino_latitude,
-            l_destino.longitude AS destino_longitude
+            lc.*,
+            rowid AS linha
+            FROM localidade lc
+            WHERE latitude IS NOT NULL;
+    BEGIN
+        FOR j IN clat LOOP
+            vsinal := -1;
+            vtamint := LENGTH(
+                SUBSTR(
+                    j.latitude,
+                    1,
+                    INSTR(j.latitude, '.') - 1
+                )
+            );
+            vtamdec := LENGTH(
+                SUBSTR(
+                    j.latitude,
+                    INSTR(j.latitude, '.') + 1,
+                    LENGTH(j.latitude)
+                )
+            );
+            vinteiro := TO_NUMBER(
+                SUBSTR(
+                    j.latitude,
+                    1,
+                    INSTR(j.latitude, '.') - 1
+                )
+            );
+            vdecimal := TO_NUMBER(
+                SUBSTR(
+                    j.latitude,
+                    INSTR(j.latitude, '.') + 1,
+                    LENGTH(j.latitude)
+                )
+            );
+            IF vinteiro >= 0 THEN
+                vsinal := 1;
+            END IF;
+            IF vtamint = 3 THEN
+                vlatitude := vsinal * vinteiro + vdecimal / 10000;
+            ELSIF vtamint = 2 THEN
+                vlatitude := vsinal * vinteiro + vdecimal / 100000;
+            ELSIF vtamint = 1 THEN
+                vlatitude := vsinal * vinteiro + vdecimal / 1000000;
+            END IF;
+            vlatitude := vlatitude * vsinal;
+            DBMS_OUTPUT.PUT_LINE(
+                'Latitude:' ||
+                j.latitude ||
+                '->' ||
+                TO_CHAR(vlatitude)
+            );
+            vinteiro := 0;
+            vdecimal := 0;
+            UPDATE localidade lc SET
+                lc.nlatitude = vlatitude
+                WHERE lc.rowid = j.linha;
+        END LOOP;
+    END;
+
+-- Execução de procedure converte_latitude
+BEGIN
+converte_latitude(1);
+END;
+
+-- Definição de function distancia
+CREATE OR REPLACE FUNCTION distancia (
+    Lat1 IN NUMBER,
+    Lon1 IN NUMBER,
+    Lat2 IN NUMBER,
+    Lon2 IN NUMBER,
+    Radius IN NUMBER DEFAULT 6387.7
+) RETURN NUMBER IS
+    Grau_para_Radiano NUMBER := 57.29577951;
+    BEGIN
+        RETURN(
+            NVL(Radius,0) *
+            ACOS((
+                    sin(NVL(Lat1,0) / Grau_para_Radiano) *
+                    SIN(NVL(Lat2,0) / Grau_para_Radiano)
+                ) +
+                (
+                    COS(NVL(Lat1,0) / Grau_para_Radiano) *
+                    COS(NVL(Lat2,0) / Grau_para_Radiano) *
+                    COS(
+                        NVL(Lon2,0) /
+                        Grau_para_Radiano -
+                        NVL(Lon1,0) /
+                        Grau_para_Radiano
+                    )
+                )
+            )
+        );
+END;
+
+-- Altreação viagem
+ALTER TABLE viagem
+    ADD (
+        velocidade NUMBER(10,3),
+        confiavel CHAR(1)
+    );
+
+-- Atualização viagen
+UPDATE viagem SET
+    confiavel = 'N'
+    WHERE duracao_min > 5000;
+
+UPDATE viagem SET
+    confiavel = 'S'
+    WHERE confiavel IS NULL;
+
+-- Alteração linha viagem
+ALTER TABLE linha_viagem
+    ADD distancia_km NUMBER(4,1);
+
+ALTER TABLE linha_viagem
+    MODIFY distancia_km INTEGER;
+
+-- Atualizacao linha viagem
+UPDATE linha_viagem lvo
+    SET lvo.distancia_km = (
+        SELECT
+            TRUNC(
+                distancia(
+                    lorig.nlatitude,
+                    lorig.nlongitude,
+                    ldest.nlatitude,
+                    ldest.nlongitude
+                )) * 1.2
+        FROM linha_viagem lv
+            JOIN localidade lorig
+                ON (lv.id_origem = lorig.id_local)
+            JOIN localidade ldest
+                ON (lv.id_destino = ldest.id_local)
+        WHERE lorig.nlatitude IS NOT NULL
+            AND  ldest.nlatitude IS NOT NULL
+            AND lvo.id_linha = lv.id_linha
+    );
+
+-- Aplicação de velocidade
+DECLARE
+    vspeed linha_viagem.distancia_km%TYPE;
+    CURSOR c_velo IS
+        SELECT
+            v.rowid AS vRow,
+            v.id_linha,
+            lv.distancia_km AS Distancia,
+            v.duracao_min AS Duracao
             FROM viagem v
             JOIN linha_viagem lv
                 ON (v.id_linha = lv.id_linha)
-            JOIN localidade l_origem
-                ON (lv.id_origem = l_origem.id_local)
-            JOIN localidade l_destino
-                ON (lv.id_destino = l_destino.id_local);
+            JOIN localidade lorig
+                ON (lv.id_origem = lorig.id_local)
+            JOIN localidade ldest
+                ON (lv.id_destino = ldest.id_local)
+            WHERE v.confiavel = 'S'
+                AND lv.distancia_km IS NOT NULL;
 BEGIN
-    FOR el_viagem IN c_viagem
-    LOOP
-        UPDATE viagem SET
-            distancia=calcular_distancia(
-                TO_NUMBER(el_viagem.origem_latitude),
-                TO_NUMBER(el_viagem.origem_longitude),
-                TO_NUMBER(el_viagem.destino_latitude),
-                TO_NUMBER(el_viagem.destino_longitude)
-            )
-            WHERE num_viagem = el_viagem.id_viagem;
+    FOR k IN c_velo LOOP
+        vspeed := ROUND(( k.Distancia/ k.duracao) * 60, 1);
+        IF vspeed <= 120 THEN
+            UPDATE viagem vg SET
+                vg.velocidade = vspeed
+                WHERE vg.rowid = k.vRow;
+        ELSE
+            UPDATE viagem vg SET
+                vg.confiavel = 'N'
+                WHERE vg.rowid = k.vRow;
+        END IF;
     END LOOP;
 END;
 
@@ -771,3 +984,84 @@ END;
 --      que poderão ser as maiores,
 --      menores ou a média), posição
 --      e ordem no ranking.
+
+-- Definição de procedure ranking_linha_velocidade_din
+CREATE OR REPLACE PROCEDURE ranking_linha_velocidade_din (
+    vorigem IN VARCHAR2,
+    vfuncao IN CHAR,
+    vrank IN SMALLINT,
+    vfuncaorank IN VARCHAR2,
+    vorder IN CHAR
+) IS TYPE vrkg_speed IS REF CURSOR;
+    vCursor_speed vrkg_speed;
+    vSQLdin VARCHAR2(1000);
+    vaux1 VARCHAR2(50);
+    vaux2uf VARCHAR2(10);
+    vaux2 VARCHAR2(50);
+    vaux3 VARCHAR2(10);
+    vaux4 VARCHAR2(10);
+    vaux5 VARCHAR2(10);
+    BEGIN
+        vSQLDin := '
+            SELECT
+                *
+                FROM (
+                    SELECT
+                        lv.id_linha AS Linhavg,
+                        ldest.cidade AS Cidade,
+                        ldest.UF AS UF,
+                        TRUNC(' || vfuncao || '(v.velocidade)) AS Velocidade,
+                        ' || vfuncaorank || '() OVER (
+                                ORDER BY ' || vfuncao || '(v.velocidade) ' || vorder || '
+                            ) AS rkg,
+                        ROW_NUMBER() OVER (
+                            ORDER BY ' || vfuncao || '(v.velocidade) ' || vorder || ') AS ordem
+                        FROM viagem v
+                        JOIN linha_viagem lv
+                            ON (v.id_linha = lv.id_linha)
+                        JOIN localidade lorig
+                            ON (lv.id_origem = lorig.id_local)
+                        JOIN localidade ldest
+                            ON (lv.id_destino = ldest.id_local)
+                        WHERE UPPER(lorig.cidade) LIKE ' || q '['%]' || UPPER(vorigem) || q' [% ']' || '
+                            AND v.velocidade IS NOT NULL
+                        GROUP BY
+                            lv.id_linha,
+                            ldest.cidade,
+                            ldest.UF
+                ) rkg_speed
+            WHERE rkg_speed.ordem <= ' || vrank;
+        DBMS_OUTPUT.PUT_LINE(vSQLdin);
+        DBMS_OUTPUT.PUT_LINE('Origem : ' || vorigem);
+        DBMS_OUTPUT.PUT_LINE('Linha             Destino          Velocidade   Posicao  Ordem');
+        DBMS_OUTPUT.PUT_LINE (RPAD('_', 100, '_'));
+        OPEN vCursor_speed FOR vSQLdin;
+        LOOP
+        FETCH vCursor_speed INTO
+            vaux1,
+            vaux2,
+            vaux2uf,
+            vaux3,
+            vaux4,
+            vaux5;
+        EXIT WHEN vCursor_speed%NOTFOUND;
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(vaux1, 15, ' ') ||
+                '| ' ||
+                RPAD(vaux2 || '-' || vaux2uf, 25, ' ') ||
+                '|' ||
+                RPAD(vaux3, 10, ' ') ||
+                '|' ||
+                RPAD(vaux4, 7, ' ') ||
+                '|' ||
+                vaux5
+            );
+            DBMS_OUTPUT.PUT_LINE(RPAD('-', 100, '-'));
+        END LOOP;
+        CLOSE vCursor_speed;
+    END;
+
+-- Execução de procedure ranking_linha_velocidade_din
+BEGIN
+    ranking_linha_velocidade_din ('sao paulo', 'AVG', 30, 'RANK', 'DESC');
+END;

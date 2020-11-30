@@ -5,6 +5,11 @@
 /*  Nome: Lucas Vidor Migotto                               */
 /* ######################################################## */
 
+-- 1    Execute o script
+--      Cria_internacao_2020.sql
+--      no SGBD Oracle, que vai
+--      implementar o BD Controle de Internações
+
 -- Alteração de parâmetros de sessão
 ALTER SESSION SET NLS_DATE_FORMAT = 'DD-MM-YYYY HH24:MI:SS';
 ALTER SESSION SET NLS_LANGUAGE = PORTUGUESE;
@@ -663,3 +668,207 @@ ALTER TABLE especialidade
 -- Atualização especialidade
 UPDATE especialidade SET
     custo_servico = 75 + 10 * cod_esp;
+
+-- 2    Implemente um controle
+--      que evite que um paciente
+--      seja internado em um
+--      leito-quarto que ainda
+--      esteja ocupado.
+
+-- Definição de trigger verifica_leito_ocupado
+CREATE OR REPLACE TRIGGER verifica_leito_ocupado
+    BEFORE INSERT ON internacao
+    FOR EACH ROW
+        DECLARE
+            leito_ocupado INTEGER;
+    BEGIN
+        SELECT
+            COUNT(*)
+            INTO leito_ocupado
+            FROM internacao
+            WHERE num_leito = :NEW.num_leito
+                AND num_qto = :NEW.num_qto
+                AND (
+                    dt_hora_saida IS NULL
+                    OR
+                    dt_hora_saida > SYSDATE
+                );
+        IF leito_ocupado > 0 THEN
+            RAISE_APPLICATION_ERROR(
+                -20001,
+                'Leito ' ||
+                :NEW.num_leito ||
+                ' do quarto ' ||
+                :NEW.num_qto ||
+                ' ainda está ocupado.'
+            );
+        END IF;
+    END;
+
+-- 3    Implemente um controle
+--      para registrar em log
+--      as aplicações de
+--      medicamento (dar o remédio)
+--      utilizando triggger composta.
+
+-- Tabela medicacao_log
+CREATE TABLE medicacao_log (
+    num_log_medicacao INTEGER NOT NULL,
+    num_prescricao    INTEGER NOT NULL,
+    dt_hora_aplicacao TIMESTAMP NOT NULL,
+    num_internacao    INTEGER NOT NULL,
+    aplicado_por      CHAR(15),
+    cod_medicamento   INTEGER NOT NULL,
+    dose_aplicada     INTEGER
+);
+
+-- Sequência seq_log_medicacao
+CREATE  SEQUENCE seq_log_medicacao
+    START WITH 1
+    INCREMENT BY 1
+    MAXVALUE 999999
+    NOCYCLE;
+
+-- Definição de trigger registra_log_medicacao
+CREATE OR REPLACE TRIGGER registra_log_medicacao
+    FOR INSERT ON aplicacao
+    COMPOUND TRIGGER
+    AFTER EACH ROW IS
+        nro_internacao internacao.num_internacao%TYPE;
+        cd_medicamento medicamento.cod_medicamento%TYPE;
+    BEGIN
+        SELECT
+            num_internacao,
+            cod_medicamento
+            INTO
+                nro_internacao,
+                cd_medicamento
+            FROM prescricao
+            WHERE num_prescricao = :NEW.num_prescricao;
+        INSERT INTO medicacao_log
+            VALUES(
+                seq_log_medicacao.NEXTVAL,
+                :NEW.num_prescricao,
+                :NEW.dt_hora_aplicacao,
+                nro_internacao,
+                :NEW.aplicado_por,
+                cd_medicamento,
+                :NEW.dose_aplicada
+            );
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE_APPLICATION_ERROR(
+                    -20001,
+                    'Erro ao gravar o log da aplicação da medicação. Número da prescricao: ' ||
+                    :NEW.num_prescricao
+                );
+            END AFTER EACH ROW;
+    END;
+
+-- 4    Implemente uma função
+--      que retorne a quantidade
+--      de pacientes internados
+--      atualmente para um
+--      determinado motivo de
+--      internação, por exemplo,
+--      Crise Renal ou Infarto,
+--      etc., passando como
+--      parâmetro parte do
+--      motivo de internação.
+--      Fala os tratamentos necessários.
+
+-- Definição de função retorna_qtd_pacientes
+CREATE OR REPLACE FUNCTION retorna_qtd_pacientes (
+    motivo_internacao IN VARCHAR2
+) RETURN INTEGER IS
+    qtd_pacientes INTEGER;
+    BEGIN
+        SELECT
+            COUNT(*)
+            INTO qtd_pacientes
+            FROM internacao
+            WHERE
+                UPPER(motivo) LIKE '%' || UPPER(motivo_internacao) || '%'
+                AND dt_hora_saida IS NULL;
+        RETURN qtd_pacientes;
+    END;
+
+-- 5    Implemente uma função
+--      que retorne o total
+--      de dias que um paciente
+--      que ficou internado para
+--      um determinado período
+--      de tempo.
+--
+--      Parâmetros de entrada:
+--          * código do paciente,
+--          data inicial e data final.
+--      Retorno:
+--          * soma dos intervalos
+--          (duração) entre a data
+--          hora entrada e data
+--          hora de alta de cada
+--          internação
+
+-- Definição de função retorna_qtd_internacao
+CREATE OR REPLACE FUNCTION retorna_qtd_internacao (
+    nro_paciente IN paciente.cod_paciente%TYPE,
+    dt_inicial IN internacao.dt_hora_entrada%TYPE,
+    dt_final IN internacao.dt_hora_alta%TYPE
+) RETURN INTEGER IS
+    duracao_internacao  NUMBER;
+    BEGIN
+        SELECT
+            TRUNC(dt_hora_alta) - TRUNC(dt_hora_entrada)
+            INTO duracao_internacao
+            FROM internacao
+            WHERE cod_paciente = nro_paciente
+                AND dt_hora_entrada >= dt_inicial
+                AND dt_hora_alta <= dt_final;
+        RETURN duracao_internacao;
+    END;
+
+-- 6    Implemente uma função
+--      que retorne todos os
+--      motivos e a quantidade
+--      de internações para cada
+--      motivo em um certo
+--      intervalo de tempo.
+--      Considere a data final
+--      como a data da alta.
+--      Por exemplo, de
+--      10/06/2019 a 20/07/2019
+
+DROP TYPE qtd_por_motiv_internacoes FORCE;
+
+-- Tipo qtd_por_motiv_internacoes
+CREATE OR REPLACE TYPE qtd_por_motiv_internacoes
+    AS OBJECT (
+        motivo VARCHAR2(40),
+        qtd_internacoes INTEGER
+    );
+
+-- Tipo tb_internacoes
+CREATE OR REPLACE TYPE tb_internacoes AS TABLE OF qtd_por_motiv_internacoes;
+
+-- Definição de função retorna_qtd_por_motivo
+CREATE OR REPLACE FUNCTION retorna_qtd_por_motivo (
+    dt_inicial IN internacao.dt_hora_entrada%TYPE,
+    dt_final IN internacao.dt_hora_alta%TYPE
+) RETURN tb_internacoes IS
+    qtd_motivo tb_internacoes := tb_internacoes();
+    BEGIN
+        FOR x IN (
+            SELECT
+                motivo,
+                COUNT(*) qtd
+                FROM internacao
+                WHERE dt_hora_entrada >= dt_inicial
+                    AND dt_hora_alta <= dt_final
+                    GROUP BY motivo
+        ) LOOP
+            qtd_motivo.EXTEND();
+            qtd_motivo(qtd_motivo.COUNT()) := qtd_por_motiv_internacoes(x.motivo, x.qtd);
+        END LOOP;
+        RETURN qtd_motivo;
+    END;

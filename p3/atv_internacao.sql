@@ -872,3 +872,420 @@ CREATE OR REPLACE FUNCTION retorna_qtd_por_motivo (
         END LOOP;
         RETURN qtd_motivo;
     END;
+
+-- 7    Elabore uma procedure
+--      com cursor para gerar
+--      um extrato dos exames
+--      médicos de uma determinada
+--      internacao
+
+-- Definição de procedure gera_relatorio_exame
+CREATE OR REPLACE PROCEDURE gera_relatorio_exame(
+    cod_internacao IN internacao.num_internacao%TYPE
+) IS CURSOR exames IS
+    SELECT
+        i.num_internacao,
+        p.nome_pac,
+        i.motivo,
+        m.nome_med,
+        i.dt_hora_entrada,
+        i.dt_hora_alta,
+        em.num_exame,
+        em.dt_hora_exame,
+        tp.tipo_exame,
+        em.laudo_exame,
+        tp.custo_exame
+        FROM
+            internacao i,
+            paciente p,
+            medico m,
+            exame_med em,
+            tipo_exame tp
+        WHERE i.cod_paciente = p.cod_paciente
+            AND i.crm_responsavel = m.crm
+            AND i.num_internacao  = em.num_internacao
+            AND em.cod_tipo_exame = tp.cod_tipo_exame
+            AND i.num_internacao = cod_internacao;
+    valor_total_exames  NUMBER(4) := 0;
+    BEGIN
+        FOR x IN exames LOOP
+            IF valor_total_exames  = 0 THEN
+                DBMS_OUTPUT.PUT_LINE(
+                    'Internação: ' ||
+                    x.num_internacao ||
+                    ' ' ||
+                    x.nome_pac ||
+                    ' -' ||
+                    x.motivo ||
+                    ' -Dr.(a)' ||
+                    x.nome_med
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    'Período: ' ||
+                    TO_CHAR(x.dt_hora_entrada, 'DD/MM/YYYY HH24:MI') ||
+                    ' a ' ||
+                    TO_CHAR(x.dt_hora_alta, 'DD/MM/YYYY HH24:MI')
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    LPAD('-', 120, '-')
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    RPAD('Exame', 20, ' ') ||
+                    RPAD('Data Hora Exame', 30, ' ') ||
+                    RPAD('Tipo', 30, ' ') ||
+                    RPAD('Laudo', 20, ' ') ||
+                    RPAD('Valor', 10, ' ') ||
+                    'Total'
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+            END IF;
+            valor_total_exames := valor_total_exames + x.custo_exame;
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(x.num_exame, 20, ' ') ||
+                RPAD(
+                    TO_CHAR(x.dt_hora_exame, 'DD/MM/YYYY HH24:MI'),
+                    30,
+                    ' '
+                ) ||
+                RPAD(x.tipo_exame, 30, ' ') ||
+                RPAD(x.laudo_exame, 20, ' ') ||
+                RPAD(x.custo_exame, 10, ' ') ||
+                valor_total_exames
+            );
+            DBMS_OUTPUT.PUT_LINE(chr(13));
+        END LOOP;
+    END;
+
+-- 8    Elabore uma procedure
+--      com cursor FETCH para
+--      gerar um extrato completo
+--      de uma determinada
+--      internacão
+
+-- Definição de procedure gera_relatorio_exame_completo
+CREATE OR REPLACE PROCEDURE gera_relatorio_exame_completo(
+    cod_internacao IN internacao.num_internacao%TYPE
+) IS
+    CURSOR c_exames IS
+        SELECT
+            i.num_internacao,
+            p.nome_pac,
+            i.motivo,
+            m.nome_med,
+            i.dt_hora_entrada,
+            i.dt_hora_alta,
+            l.tipo_leito,
+            q.tipo_qto,
+            i.custo_internacao,
+            l.custo_diaria,
+            em.num_exame,
+            em.dt_hora_exame,
+            tp.tipo_exame,
+            em.laudo_exame,
+            tp.custo_exame
+            FROM
+                internacao i,
+                paciente p,
+                medico m,
+                exame_med em,
+                tipo_exame tp,
+                leito l,
+                quarto q
+            WHERE i.cod_paciente = p.cod_paciente
+                AND i.crm_responsavel = m.crm
+                AND i.num_internacao  = em.num_internacao
+                AND em.cod_tipo_exame = tp.cod_tipo_exame
+                AND i.num_qto = q.num_qto
+                AND i.num_leito = l.num_leito
+                AND q.num_qto = l.num_qto
+                AND i.num_internacao = cod_internacao;
+    CURSOR c_dados_medicacao IS
+        SELECT
+            a.num_aplicacao,
+            a.dt_hora_aplicacao,
+            me.nome_medicamento,
+            a.aplicado_por,
+            a.dose_aplicada,
+            me.custo_dose
+            FROM
+                internacao i,
+                aplicacao a,
+                prescricao pr,
+                medicamento me
+            WHERE i.num_internacao = pr.num_internacao
+                AND pr.num_prescricao = a.num_prescricao
+                AND pr.cod_medicamento = me.cod_medicamento
+                AND i.num_internacao = cod_internacao;
+    exames c_exames%ROWTYPE;
+    dados_medicacao c_dados_medicacao%ROWTYPE;
+    custo_total_diaria NUMBER(8);
+    valor_total_exames  NUMBER(4) := 0;
+    custo_dose NUMBER(8) := 0;
+    total_internacao NUMBER(8);
+    BEGIN
+        OPEN c_exames;
+        LOOP
+        FETCH c_exames INTO exames;
+        EXIT WHEN c_exames%NOTFOUND;
+            IF valor_total_exames  = 0 THEN
+                DBMS_OUTPUT.PUT_LINE(
+                    'Internação: ' ||
+                    exames.num_internacao ||
+                    ' ' ||
+                    exames.nome_pac ||
+                    ' -' ||
+                    exames.motivo ||
+                    ' -Dr.(a)' ||
+                    exames.nome_med
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    'Período: ' ||
+                    TO_CHAR(exames.dt_hora_entrada, 'DD/MM/YYYY HH24:MI') ||
+                    ' a ' ||
+                    TO_CHAR(exames.dt_hora_alta, 'DD/MM/YYYY HH24:MI') ||
+                    ' - ' ||
+                    'Leito: ' ||
+                    exames.tipo_leito ||
+                    '-' ||
+                    exames.tipo_qto
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                SELECT
+                    (
+                        l.custo_diaria *
+                        (TRUNC(dt_hora_alta) - TRUNC(dt_hora_entrada))
+                    ) custo_diaria
+                    INTO custo_total_diaria
+                    FROM
+                        quarto q,
+                        leito l,
+                        internacao i
+                    WHERE i.num_internacao = cod_internacao
+                        AND i.num_qto = q.num_qto
+                        AND i.num_leito = l.num_leito
+                        AND q.num_qto = l.num_qto;
+                DBMS_OUTPUT.PUT_LINE(
+                    'Total Diárias: ' ||
+                    custo_total_diaria
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    LPAD('-',120, '-')
+                );
+                DBMS_OUTPUT.PUT_LINE(
+                    RPAD('Aplicacao', 10, ' ') ||
+                    RPAD('Data Hora Exame', 15, ' ') ||
+                    RPAD('Medicamento', 15, ' ') ||
+                    RPAD('Responsavael Aplicacao', 25, ' ') ||
+                    RPAD('Dose Aplicada', 20, ' ') ||
+                    'Custo Dose'
+                );
+                OPEN c_dados_medicacao;
+                LOOP
+                FETCH c_dados_medicacao INTO dados_medicacao;
+                EXIT WHEN c_dados_medicacao%NOTFOUND;
+                    DBMS_OUTPUT.PUT_LINE(
+                        RPAD(dados_medicacao.num_aplicacao, 10, ' ') ||
+                        RPAD(
+                            TO_CHAR(dados_medicacao.dt_hora_aplicacao, 'DD/MM/YYYY HH24:MI'),
+                            15,
+                            ' '
+                        ) ||
+                        RPAD(dados_medicacao.nome_medicamento, 15, ' ') ||
+                        RPAD(dados_medicacao.aplicado_por, 25, ' ') ||
+                        RPAD(dados_medicacao.dose_aplicada, 20, ' ') ||
+                        dados_medicacao.custo_dose
+                    );
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    LPAD('-',120, '-')
+                );
+                DBMS_OUTPUT.PUT_LINE('Total Medicamentos: ');
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+                DBMS_OUTPUT.PUT_LINE(
+                    LPAD('-',120, '-')
+                );
+                DBMS_OUTPUT.PUT_LINE(
+                    RPAD('Exame', 20, ' ') ||
+                    RPAD('Data Hora Exame', 30, ' ') ||
+                    RPAD('Tipo', 30, ' ') ||
+                    RPAD('Laudo', 20, ' ') ||
+                    RPAD('Valor', 10, ' ')
+                );
+                DBMS_OUTPUT.PUT_LINE(chr(13));
+            END IF;
+            valor_total_exames := valor_total_exames + exames.custo_exame;
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(exames.num_exame, 20, ' ') ||
+                RPAD(
+                    TO_CHAR(exames.dt_hora_exame, 'DD/MM/YYYY HH24:MI'),
+                    30,
+                    ' '
+                ) ||
+                RPAD(exames.tipo_exame, 30, ' ') ||
+                RPAD(exames.laudo_exame, 20, ' ') ||
+                RPAD(exames.custo_exame, 10, ' ')
+            );
+            DBMS_OUTPUT.PUT_LINE(chr(13));
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE(
+            LPAD('-',120, '-')
+        );
+        DBMS_OUTPUT.PUT_LINE(
+            'Total Exames: ' ||
+            valor_total_exames
+        );
+        total_internacao := valor_total_exames + custo_total_diaria;
+        DBMS_OUTPUT.PUT_LINE(chr(13));
+        DBMS_OUTPUT.PUT_LINE(
+            LPAD('-',120, '-')
+        );
+        DBMS_OUTPUT.PUT_LINE(
+            'Total Internacao: ' ||
+            total_internacao
+        );
+    END;
+
+-- 9    Implemente um controle
+--      para registrar a Situação
+--      da Aplicação do medicamento
+--      da prescrição quando a
+--      data da aplicação for
+--      preenchida ou atualizada.
+--      Se necessário modifique a
+--      estrutura da tabela aplicação
+--      para registrar a situação:
+--          * Aguardando;
+--          * Realizada.
+
+-- Alteração aplicacao
+ALTER TABLE aplicacao
+    ADD situacao VARCHAR2(20);
+
+-- Definição de trigger controle_sit_aplicacao
+CREATE OR REPLACE TRIGGER controle_sit_aplicacao
+    BEFORE INSERT OR UPDATE ON aplicacao
+    FOR EACH ROW
+    BEGIN
+        IF :NEW.dt_hora_aplicacao > CURRENT_TIMESTAMP THEN
+            :NEW.situacao := 'Aguardando';
+        ELSE
+            :NEW.situacao := 'Realizada';
+        END IF;
+END;
+
+-- 11   Implemente uma procedure
+--      com parâmetro de saída
+--      sendo um cursor que mostre
+--      os seguintes dados para
+--      um determinado médico
+--      responsável em um
+--      determinado intervalo
+
+-- Definição de procedure retorna_dados_med_responsavel
+CREATE OR REPLACE PROCEDURE retorna_dados_med_responsavel(
+    cod_crm IN medico.crm%TYPE,
+    dt_inicial IN internacao.dt_hora_entrada%TYPE,
+    dt_final IN internacao.dt_hora_alta%TYPE
+) IS CURSOR med_responsavel IS
+    SELECT
+        i.num_internacao,
+        p.nome_pac,
+        i.motivo,
+        (
+            TRUNC(dt_hora_alta) - TRUNC(dt_hora_entrada)
+        ) dias_internacao
+        FROM
+            internacao i,
+            paciente p,
+            medico m
+        WHERE i.cod_paciente = p.cod_paciente
+            AND i.crm_responsavel = m.crm
+            AND crm = cod_crm
+            AND dt_hora_entrada >= dt_inicial
+            AND dt_hora_alta <= dt_final;
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE(
+            RPAD('Internacao', 20, ' ') ||
+            RPAD('Paciente', 30, ' ') ||
+            RPAD('Motivo', 30, ' ') ||
+            'Dias de Internação'
+        );
+        FOR x IN med_responsavel LOOP
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(x.num_internacao, 20, ' ') ||
+                RPAD(x.nome_pac, 30, ' ') ||
+                RPAD(x.motivo , 30, ' ') ||
+                x.dias_internacao
+            );
+        END LOOP;
+    END;
+
+-- 12   Refazer o item 11
+--      acima usando SQL Dinâmico.
+
+-- Definição de procedure retorna_dados_med_responsavel_din
+CREATE OR REPLACE PROCEDURE retorna_dados_med_responsavel_din(
+    cod_crm IN medico.crm%TYPE,
+    dt_inicial IN internacao.dt_hora_entrada%TYPE,
+    dt_final IN internacao.dt_hora_alta%TYPE
+) IS
+    TYPE med_resp IS REF CURSOR;
+    v_med_resp med_resp;
+    vsql_din VARCHAR2(4000);
+    num_internacao internacao.num_internacao%TYPE;
+    motivo  internacao.motivo%TYPE;
+    nome_pac paciente.nome_pac%TYPE;
+    dias_internacao NUMBER(8);
+    BEGIN
+        vsql_din :=
+            'SELECT
+                i.num_internacao,
+                p.nome_pac,
+                i.motivo,
+                (
+                    TRUNC(dt_hora_alta) - TRUNC(dt_hora_entrada)
+                ) dias_internacao
+                FROM
+                    internacao i,
+                    paciente p,
+                    medico m
+                WHERE i.cod_paciente = p.cod_paciente
+                    AND i.crm_responsavel = m.crm
+                    AND crm =  :a
+                    AND dt_hora_entrada >=  :b
+                    AND dt_hora_alta <=  :c';
+        DBMS_OUTPUT.PUT_LINE(
+            RPAD('Internacao', 20, ' ') ||
+            RPAD('Paciente', 30, ' ') ||
+            RPAD('Motivo', 30, ' ') ||
+            'Dias de Internação'
+        );
+        OPEN v_med_resp
+            FOR vsql_din
+            USING
+                cod_crm,
+                dt_inicial,
+                dt_final;
+        LOOP
+        FETCH v_med_resp
+            INTO
+                num_internacao,
+                motivo,
+                nome_pac,
+                dias_internacao;
+            EXIT WHEN v_med_resp%NOTFOUND;
+            DBMS_OUTPUT.PUT_LINE(
+                RPAD(num_internacao, 20, ' ') ||
+                RPAD(nome_pac, 30, ' ') ||
+                RPAD(motivo , 30, ' ') ||
+                dias_internacao
+            );
+        END LOOP;
+        CLOSE v_med_resp;
+    END;
